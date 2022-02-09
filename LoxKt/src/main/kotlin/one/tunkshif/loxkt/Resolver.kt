@@ -2,6 +2,7 @@ package one.tunkshif.loxkt
 
 import one.tunkshif.loxkt.ast.Expr
 import one.tunkshif.loxkt.ast.Stmt
+import one.tunkshif.loxkt.util.choose
 import java.util.*
 
 class Resolver(
@@ -9,11 +10,16 @@ class Resolver(
 ) : Expr.Visitor<Unit>, Stmt.Visitor<Unit> {
 
     private enum class FunctionType {
-        NONE, FUNCTION
+        NONE, FUNCTION, METHOD, INITIALIZER
+    }
+
+    private enum class ClassType {
+        NONE, CLASS
     }
 
     private val scopes = Stack<MutableMap<String, Boolean>>()
     private var currentFunction = FunctionType.NONE
+    private var currentClass = ClassType.NONE
 
     fun resolve(statements: List<Stmt>) = statements.forEach { resolve(it) }
     private fun resolve(stmt: Stmt) = stmt.accept(this)
@@ -66,6 +72,23 @@ class Resolver(
         endScope()
     }
 
+    override fun visitClassStmt(stmt: Stmt.Class) {
+        val enclosingClass = currentClass
+        currentClass = ClassType.CLASS
+
+        declare(stmt.name)
+        define(stmt.name)
+
+        beginScope()
+        scopes.peek()["this"] = true
+        for (method in stmt.methods) {
+            val declaration = (method.name.lexeme == "init").choose(FunctionType.INITIALIZER, FunctionType.METHOD)
+            resolveFunction(method, declaration)
+        }
+        endScope()
+        currentClass = enclosingClass
+    }
+
     override fun visitVarStmt(stmt: Stmt.Var) {
         declare(stmt.name)
         stmt.initializer?.let { resolve(it) }
@@ -105,10 +128,15 @@ class Resolver(
     }
 
     override fun visitReturnStmt(stmt: Stmt.Return) {
-        if (currentFunction == FunctionType.NONE) {
-            Lox.error(stmt.keyword, "Can't return from top-level code.")
+        stmt.value?.let {
+            if (currentFunction == FunctionType.NONE) {
+                Lox.error(stmt.keyword, "Can't return from top-level code.")
+            }
+            if (currentFunction == FunctionType.INITIALIZER) {
+                Lox.error(stmt.keyword, "Can't return a value from an initializer.")
+            }
+            resolve(it)
         }
-        stmt.value?.let { resolve(it) }
     }
 
     override fun visitWhileStmt(stmt: Stmt.While) {
@@ -126,6 +154,10 @@ class Resolver(
         expr.arguments.forEach { resolve(it) }
     }
 
+    override fun visitGetExpr(expr: Expr.Get) {
+        resolve(expr.obj)
+    }
+
     override fun visitGroupingExpr(expr: Expr.Grouping) {
         resolve(expr.expression)
     }
@@ -133,6 +165,19 @@ class Resolver(
     override fun visitLogicalExpr(expr: Expr.Logical) {
         resolve(expr.left)
         resolve(expr.right)
+    }
+
+    override fun visitSetExpr(expr: Expr.Set) {
+        resolve(expr.value)
+        resolve(expr.obj)
+    }
+
+    override fun visitThisExpr(expr: Expr.This) {
+        if (currentClass == ClassType.NONE) {
+            Lox.error(expr.keyword, "Can't use 'this' outside of a class.")
+            return
+        }
+        resolveLocal(expr, expr.keyword)
     }
 
     override fun visitUnaryExpr(expr: Expr.Unary) {

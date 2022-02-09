@@ -23,6 +23,7 @@ class Parser(
     private fun declaration(): Stmt? {
         return try {
             when {
+                match(TokenType.CLASS) -> classDeclaration()
                 match(TokenType.FUN) -> function("function")
                 match(TokenType.VAR) -> varDeclaration()
                 else -> statement()
@@ -53,6 +54,8 @@ class Parser(
             if (expr is Expr.Variable) {
                 val name = expr.name
                 return Expr.Assign(name, value)
+            } else if (expr is Expr.Get) {
+                return Expr.Set(expr.obj, expr.name, value)
             }
             error(equals, "Invalid assignment target.")
         }
@@ -131,10 +134,14 @@ class Parser(
     private fun call(): Expr {
         var expr = primary()
         while (true) {
-            if (match(TokenType.LEFT_PAREN)) {
-                expr = finishCall(expr)
-            } else {
-                break
+            expr = when {
+                match(TokenType.LEFT_PAREN) -> finishCall(expr)
+                match(TokenType.DOT) -> {
+                    val name = consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
+                    Expr.Get(expr, name)
+                }
+                else -> break
+
             }
         }
         return expr
@@ -180,6 +187,7 @@ class Parser(
             match(TokenType.TRUE) -> return Expr.Literal(true)
             match(TokenType.NIL) -> return Expr.Literal(null)
             match(TokenType.NUMBER, TokenType.STRING) -> return Expr.Literal(previous().literal)
+            match(TokenType.THIS) -> return Expr.This(previous())
             match(TokenType.IDENTIFIER) -> return Expr.Variable(previous())
             match(TokenType.LEFT_PAREN) -> {
                 val expr = expression()
@@ -264,6 +272,17 @@ class Parser(
         }
         consume(TokenType.RIGHT_BRACE, "Expected '}' after block.")
         return statements
+    }
+
+    private fun classDeclaration(): Stmt {
+        val name = consume(TokenType.IDENTIFIER, "Expect class name.")
+        consume(TokenType.LEFT_BRACE, "Expect '{' after class name.")
+        val methods = mutableListOf<Stmt.Function>()
+        while (!check(TokenType.RIGHT_BRACE) && !isAtEnd()) {
+            methods.add(function("method"))
+        }
+        consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.")
+        return Stmt.Class(name, methods)
     }
 
     private fun varDeclaration(): Stmt {

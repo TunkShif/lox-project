@@ -7,7 +7,8 @@ import one.tunkshif.loxkt.ast.Stmt
 
 class LoxFunction(
     private val declaration: Stmt.Function,
-    private val closure: Environment
+    private val closure: Environment,
+    private val isInitializer: Boolean = false
 ) : LoxCallable {
     override val arity: Int = declaration.params.size
 
@@ -19,9 +20,19 @@ class LoxFunction(
         try {
             interpreter.executeBlock(declaration.body, environment)
         } catch (returnValue: Return) {
+            if (isInitializer) return closure.getAt(0, "this")
             return returnValue.value
         }
+        if (isInitializer) {
+            return closure.getAt(0, "init")
+        }
         return null
+    }
+
+    fun bind(instance: LoxInstance): LoxFunction {
+        val environment = Environment(closure)
+        environment.define("this", instance)
+        return LoxFunction(declaration, environment, isInitializer)
     }
 
     override fun toString(): String = "<fun ${declaration.name.lexeme}/${declaration.params.size}>"

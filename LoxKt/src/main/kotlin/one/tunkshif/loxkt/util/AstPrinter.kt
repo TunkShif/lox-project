@@ -3,6 +3,7 @@ package one.tunkshif.loxkt.util
 import one.tunkshif.loxkt.ast.Expr
 
 class AstPrinter : Expr.Visitor<String> {
+
     fun print(expr: Expr): String {
         return expr.accept(this)
     }
@@ -48,5 +49,17 @@ class AstPrinter : Expr.Visitor<String> {
 
     override fun visitAssignExpr(expr: Expr.Assign): String {
         return parenthesize("= ${expr.name.lexeme}", expr.value)
+    }
+
+    override fun visitSetExpr(expr: Expr.Set): String {
+        return parenthesize("= ${expr.name}", expr.obj, expr.value)
+    }
+
+    override fun visitGetExpr(expr: Expr.Get): String {
+        return parenthesize(". ${expr.name}", expr.obj)
+    }
+
+    override fun visitThisExpr(expr: Expr.This): String {
+        return "this"
     }
 }
