@@ -14,6 +14,7 @@ sealed class Expr {
         fun visitLiteralExpr(expr: Literal): R
         fun visitLogicalExpr(expr: Logical): R
         fun visitSetExpr(expr: Set): R
+        fun visitSuperExpr(expr: Super): R
         fun visitThisExpr(expr: This): R
         fun visitUnaryExpr(expr: Unary): R
         fun visitVariableExpr(expr: Variable): R
@@ -49,6 +50,10 @@ sealed class Expr {
 
     class Set(val obj: Expr, val name: Token, val value: Expr) : Expr() {
         override fun <R> accept(visitor: Visitor<R>): R = visitor.visitSetExpr(this)
+    }
+
+    class Super(val keyword: Token, val method: Token) : Expr() {
+        override fun <R> accept(visitor: Visitor<R>): R = visitor.visitSuperExpr(this)
     }
 
     class This(val keyword: Token) : Expr() {

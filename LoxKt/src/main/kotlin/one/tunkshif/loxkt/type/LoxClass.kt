@@ -4,6 +4,7 @@ import one.tunkshif.loxkt.Interpreter
 
 class LoxClass(
     val name: String,
+    val superclass: LoxClass?,
     private val methods: Map<String, LoxFunction>
 ) : LoxCallable {
     override val arity: Int = findMethod("init")?.arity ?: 0
@@ -18,6 +19,9 @@ class LoxClass(
     fun findMethod(name: String): LoxFunction? {
         if (methods.containsKey(name)) {
             return methods[name]
+        }
+        superclass?.let {
+            return superclass.findMethod(name)
         }
         return null
     }

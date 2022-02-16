@@ -21,7 +21,7 @@ sealed class Stmt {
         override fun <R> accept(visitor: Visitor<R>): R = visitor.visitBlockStmt(this)
     }
 
-    class Class(val name: Token, val methods: List<Function>) : Stmt() {
+    class Class(val name: Token, val superclass: Expr.Variable?, val methods: List<Function>) : Stmt() {
         override fun <R> accept(visitor: Visitor<R>): R = visitor.visitClassStmt(this)
     }
 
