@@ -3,7 +3,15 @@ const Value = @import("./value.zig").Value;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-pub const OpCode = enum(u8) { op_constant, op_return };
+pub const OpCode = enum(u8) {
+    op_constant,
+    op_add,
+    op_substract,
+    op_multiply,
+    op_divide,
+    op_negate,
+    op_return,
+};
 
 pub const Chunk = struct {
     code: ArrayList(u8),
@@ -38,11 +46,12 @@ pub const Chunk = struct {
 };
 
 test "chunk" {
-    const debug = @import("./debug.zig");
-
     std.debug.print("\n", .{});
 
-    var chunk = Chunk.init(std.testing.allocator);
+    const debug = @import("./debug.zig");
+    const allocator = std.testing.allocator;
+
+    var chunk = Chunk.init(allocator);
     defer chunk.deinit();
 
     const constant = try chunk.addConstant(Value{ .number = 1.2 });
