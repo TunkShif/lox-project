@@ -1,0 +1,51 @@
+pub const TokenType = enum {
+    token_lparen,
+    token_rparen,
+    token_lbrace,
+    token_rbrace,
+    token_comma,
+    token_dot,
+    token_minus,
+    token_plus,
+    token_semicolon,
+    token_slash,
+    token_star,
+    // one or two character tokens.
+    token_bang,
+    token_bang_equal,
+    token_equal,
+    token_equal_equal,
+    token_greater,
+    token_greater_equal,
+    token_less,
+    token_less_equal,
+    // literals.
+    token_identifier,
+    token_string,
+    token_number,
+    // keywords.
+    token_and,
+    token_class,
+    token_def,
+    token_else,
+    token_false,
+    token_for,
+    token_if,
+    token_let,
+    token_nil,
+    token_or,
+    token_return,
+    token_super,
+    token_this,
+    token_true,
+    token_while,
+
+    token_error,
+    token_eof,
+};
+
+pub const Token = struct {
+    token_type: TokenType,
+    lexeme: []const u8,
+    line: usize,
+};
