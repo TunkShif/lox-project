@@ -1,6 +1,6 @@
 const std = @import("std");
-const Token = @import("./token.zig").Token;
-const TokenType = @import("./token.zig").TokenType;
+const Token = @import("token.zig").Token;
+const TokenType = @import("token.zig").TokenType;
 
 const KEYWORDS = std.ComptimeStringMap(TokenType, .{
     .{ "and", .token_and },

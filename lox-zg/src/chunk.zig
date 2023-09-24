@@ -1,7 +1,7 @@
 const std = @import("std");
-const Value = @import("./value.zig").Value;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Value = @import("value.zig").Value;
 
 pub const OpCode = enum(u8) {
     op_constant,
@@ -41,23 +41,23 @@ pub const Chunk = struct {
     // the maximum constant pool size is 256.
     pub fn addConstant(self: *Chunk, value: Value) !u8 {
         try self.constants.append(value);
-        return @intCast(u8, self.constants.items.len - 1);
+        return @intCast(self.constants.items.len - 1);
     }
 };
 
 test "chunk" {
     std.debug.print("\n", .{});
 
-    const debug = @import("./debug.zig");
+    const debug = @import("debug.zig");
     const allocator = std.testing.allocator;
 
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
 
     const constant = try chunk.addConstant(Value{ .number = 1.2 });
-    try chunk.writeChunk(@enumToInt(OpCode.op_constant), 123);
+    try chunk.writeChunk(@intFromEnum(OpCode.op_constant), 123);
     try chunk.writeChunk(constant, 123);
-    try chunk.writeChunk(@enumToInt(OpCode.op_return), 123);
+    try chunk.writeChunk(@intFromEnum(OpCode.op_return), 123);
 
     debug.disassembleChunk(&chunk, "test chunk");
 }
