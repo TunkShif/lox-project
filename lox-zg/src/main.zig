@@ -1,29 +1,18 @@
 const std = @import("std");
+const Compiler = @import("compiler.zig").Compiler;
+const VM = @import("vm.zig").VM;
 
 pub fn main() anyerror!void {
     std.io.getStdOut().writer().print("hello!\n", .{}) catch return;
-}
 
-test "vm" {
-    std.debug.print("\n", .{});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
 
-    const Chunk = @import("chunk.zig").Chunk;
-    const Value = @import("value.zig").Value;
-    const OpCode = @import("chunk.zig").OpCode;
-    const VM = @import("vm.zig").VM;
+    const allocator = gpa.allocator();
 
-    const allocator = std.testing.allocator;
-
-    var chunk = Chunk.init(allocator);
-    defer chunk.deinit();
-
-    const constant = try chunk.addConstant(Value{ .number = 1.2 });
-    try chunk.writeChunk(@intFromEnum(OpCode.op_constant), 123);
-    try chunk.writeChunk(constant, 123);
-    try chunk.writeChunk(@intFromEnum(OpCode.op_negate), 123);
-    try chunk.writeChunk(@intFromEnum(OpCode.op_return), 123);
-
-    var vm = VM.init(allocator);
+    var compiler = Compiler.init();
+    var vm = VM.init(allocator, &compiler);
     defer vm.deinit();
-    try vm.interpret(&chunk);
+
+    vm.interpret("(1+2)*3-4/5") catch return;
 }

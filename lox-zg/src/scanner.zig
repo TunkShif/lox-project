@@ -34,13 +34,20 @@ pub const Scanner = struct {
     current: usize,
     line: usize,
 
-    pub fn init(source: []const u8) Scanner {
+    pub fn init() Scanner {
         return Scanner{
-            .source = source,
+            .source = undefined,
             .start = 0,
             .current = 0,
             .line = 1,
         };
+    }
+
+    pub fn reset(self: *Scanner, source: []const u8) void {
+        self.source = source;
+        self.start = 0;
+        self.current = 0;
+        self.line = 1;
     }
 
     pub fn scanToken(self: *Scanner) Token {

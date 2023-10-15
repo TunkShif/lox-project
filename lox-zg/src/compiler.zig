@@ -1,70 +1,261 @@
 const std = @import("std");
+const debug = @import("debug.zig");
+const config = @import("config.zig");
+const Allocator = std.mem.Allocator;
 const Chunk = @import("chunk.zig").Chunk;
+const OpCode = @import("chunk.zig").OpCode;
+const Value = @import("value.zig").Value;
 const Token = @import("token.zig").Token;
 const TokenType = @import("token.zig").TokenType;
 const Scanner = @import("scanner.zig").Scanner;
 
-pub fn compile(source: []const u8, chunk: *Chunk) !void {
-    _ = chunk;
-    _ = source;
-}
+const Precedence = enum(u8) {
+    prec_none,
+    prec_assignment, // =
+    prec_or, // or
+    prec_and, // and
+    prec_equality, // == !=
+    prec_comparison, // < > <= >=
+    prec_term, // + -
+    prec_factor, // * /
+    prec_unary, // ! -
+    prec_call, // . ()
+    prec_primary,
+};
 
-pub const Parser = struct {
-    scanner: *Scanner,
+const ParseFn = *const fn (compiler: *Compiler) anyerror!void;
+
+const ParseRule = struct {
+    prefix: ?ParseFn,
+    infix: ?ParseFn,
+    precedence: Precedence,
+
+    fn getRule(token_type: TokenType) *const ParseRule {
+        return &rules[@intFromEnum(token_type)];
+    }
+};
+
+const rules = [_]ParseRule{
+    .{ .prefix = Compiler.grouping, .infix = null, .precedence = .prec_none }, // token_lparen,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_rparen,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_lbrace,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_rbrace,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_comma,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_dot,
+    .{ .prefix = Compiler.unary, .infix = Compiler.binary, .precedence = .prec_term }, // token_minus,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_term }, // token_plus,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_semicolon,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_factor }, // token_slash,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_factor }, // token_star,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_bang,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_bang_equal,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_equal,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_equal_equal,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_greater,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_greater_equal,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_less,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_less_equal,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_identifier,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_string,
+    .{ .prefix = Compiler.number, .infix = null, .precedence = .prec_none }, // token_number,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_and,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_class,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_def,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_else,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_false,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_for,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_if,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_let,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_nil,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_or,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_return,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_super,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_this,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_true,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_while,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_error,
+    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_eof,
+};
+
+pub const Compiler = struct {
+    scanner: Scanner,
     previous: Token,
     current: Token,
+    compiling_chunk: *Chunk,
     had_error: bool,
     panic_mode: bool,
 
-    pub fn init(scanner: *Scanner) Parser {
-        return Parser{
+    pub fn init() Compiler {
+        const scanner = Scanner.init();
+
+        return Compiler{
             .scanner = scanner,
             .previous = undefined,
             .current = undefined,
+            .compiling_chunk = undefined,
             .had_error = false,
             .panic_mode = false,
         };
     }
 
-    fn advance(self: *Parser) void {
+    pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
+        self.scanner.reset(source);
+        self.compiling_chunk = chunk;
+
+        self.had_error = false;
+        self.panic_mode = false;
+
+        self.advance();
+        try self.expression();
+        self.consume(.token_eof, "Expected end of expression.");
+
+        try self.endCompiler();
+        return !self.had_error;
+    }
+
+    fn advance(self: *Compiler) void {
         self.previous = self.current;
         while (true) {
             self.current = self.scanner.scanToken();
-            if (self.current.token_type != .token_error) break;
-            self.errorAtCurrent(self.current.lexeme);
+            if (self.current.token_type != .token_error) {
+                break;
+            }
+
+            self.errorsAtCurrent(self.current.lexeme);
         }
     }
 
-    fn consume(self: *Parser, token_type: TokenType, message: []const u8) void {
-        if (self.current == token_type) {
+    fn consume(self: *Compiler, token_type: TokenType, message: []const u8) void {
+        if (self.current.token_type == token_type) {
             self.advance();
             return;
         }
         self.errorsAtCurrent(message);
     }
 
-    fn errors(self: *Parser, message: []const u8) void {
-        self.errorAt(&self.previous, message);
+    fn currentChunk(self: *Compiler) *Chunk {
+        return self.compiling_chunk;
     }
 
-    fn errorsAtCurrent(self: *Parser, message: []const u8) void {
-        self.errorAt(&self.current, message);
+    fn emitByte(self: *Compiler, byte: u8) !void {
+        try self.currentChunk().writeChunk(byte, self.previous.line);
     }
 
-    fn errorsAt(self: *Parser, token: *Token, message: []const u8) void {
+    fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) !void {
+        try self.emitByte(byte1);
+        try self.emitByte(byte2);
+    }
+
+    fn emitOpCode(self: *Compiler, op_code: OpCode) !void {
+        try self.emitByte(@intFromEnum(op_code));
+    }
+
+    fn emitReturn(self: *Compiler) !void {
+        try self.emitOpCode(.op_return);
+    }
+
+    fn makeConstant(self: *Compiler, value: Value) !u8 {
+        const constant = try self.currentChunk().addConstant(value);
+        if (constant > std.math.maxInt(u8)) {
+            self.errors("Reached constant size limit in a chunk.");
+            return 0;
+        }
+        return @intCast(constant);
+    }
+
+    fn emitConstant(self: *Compiler, value: Value) !void {
+        try self.emitBytes(@intFromEnum(OpCode.op_constant), try self.makeConstant(value));
+    }
+
+    fn endCompiler(self: *Compiler) !void {
+        try self.emitReturn();
+
+        if (comptime config.debug_print_code) {
+            if (!self.had_error) {
+                debug.disassembleChunk(self.currentChunk(), "code");
+            }
+        }
+    }
+
+    fn binary(self: *Compiler) !void {
+        const operator_type = self.previous.token_type;
+        const rule = ParseRule.getRule(operator_type);
+        const precedence: Precedence = @enumFromInt(@intFromEnum(rule.precedence) + 1);
+        try self.parsePrecedence(precedence);
+
+        switch (operator_type) {
+            .token_plus => try self.emitOpCode(.op_add),
+            .token_minus => try self.emitOpCode(.op_substract),
+            .token_star => try self.emitOpCode(.op_multiply),
+            .token_slash => try self.emitOpCode(.op_divide),
+            else => return,
+        }
+    }
+
+    fn grouping(self: *Compiler) !void {
+        try self.expression();
+        self.consume(.token_rparen, "Expect ')' after expression.");
+    }
+
+    fn number(self: *Compiler) !void {
+        const value = std.fmt.parseFloat(f64, self.previous.lexeme) catch 0;
+        try self.emitConstant(Value{ .number = value });
+    }
+
+    fn unary(self: *Compiler) !void {
+        const operator_type = self.previous.token_type;
+
+        try self.parsePrecedence(.prec_unary);
+
+        switch (operator_type) {
+            .token_minus => try self.emitOpCode(.op_negate),
+            else => return,
+        }
+    }
+
+    fn expression(self: *Compiler) !void {
+        try self.parsePrecedence(.prec_assignment);
+    }
+
+    fn parsePrecedence(self: *Compiler, precedence: Precedence) !void {
+        self.advance();
+
+        if (ParseRule.getRule(self.previous.token_type).prefix) |prefixRule| {
+            try prefixRule(self);
+
+            while (@intFromEnum(ParseRule.getRule(self.current.token_type).precedence) >= @intFromEnum(precedence)) {
+                self.advance();
+                const infixRule = ParseRule.getRule(self.previous.token_type).infix.?;
+                try infixRule(self);
+            }
+        } else {
+            self.errors("Expect expression.");
+            return;
+        }
+    }
+
+    fn errors(self: *Compiler, message: []const u8) void {
+        self.errorsAt(&self.previous, message);
+    }
+
+    fn errorsAtCurrent(self: *Compiler, message: []const u8) void {
+        self.errorsAt(&self.current, message);
+    }
+
+    fn errorsAt(self: *Compiler, token: *Token, message: []const u8) void {
         if (self.panic_mode) return;
         self.panic_mode = true;
 
         const stderr = std.io.getStdErr().writer();
         stderr.print("[line {d}] Error ", .{token.line}) catch return;
-        switch (token.type) {
-            .token_eof => stderr.print("at end", .{token.line}) catch return,
+        switch (token.token_type) {
+            .token_eof => stderr.print("at end", .{}) catch return,
             .token_error => {
                 // do nothing right now
             },
-            else => stderr.print("at '{s}'", .{token.lexeme}),
+            else => stderr.print("at '{s}'", .{token.lexeme}) catch return,
         }
-        stderr.print(": {s}\n", .{message});
+        stderr.print(": {s}\n", .{message}) catch return;
         self.had_error = true;
     }
 };

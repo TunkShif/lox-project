@@ -37,11 +37,9 @@ pub const Chunk = struct {
         try self.lines.append(line);
     }
 
-    // Since OP_CONSTANT instruction only takes a single byte operand,
-    // the maximum constant pool size is 256.
-    pub fn addConstant(self: *Chunk, value: Value) !u8 {
+    pub fn addConstant(self: *Chunk, value: Value) !usize {
         try self.constants.append(value);
-        return @intCast(self.constants.items.len - 1);
+        return self.constants.items.len - 1;
     }
 };
 
