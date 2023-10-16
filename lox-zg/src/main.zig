@@ -14,5 +14,5 @@ pub fn main() anyerror!void {
     var vm = VM.init(allocator, &compiler);
     defer vm.deinit();
 
-    vm.interpret("(1+2)*3-4/5") catch return;
+    vm.interpret("!(5 - 4 > 3 * 2 == !nil)") catch return;
 }

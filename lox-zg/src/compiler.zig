@@ -47,14 +47,14 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_semicolon,
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_factor }, // token_slash,
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_factor }, // token_star,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_bang,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_bang_equal,
+    .{ .prefix = Compiler.unary, .infix = null, .precedence = .prec_none }, // token_bang,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_equality }, // token_bang_equal,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_equal,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_equal_equal,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_greater,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_greater_equal,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_less,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_less_equal,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_equality }, // token_equal_equal,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_greater,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_greater_equal,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less,
+    .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less_equal,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_identifier,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_string,
     .{ .prefix = Compiler.number, .infix = null, .precedence = .prec_none }, // token_number,
@@ -62,16 +62,16 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_class,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_def,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_else,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_false,
+    .{ .prefix = Compiler.literal, .infix = null, .precedence = .prec_none }, // token_false,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_for,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_if,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_let,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_nil,
+    .{ .prefix = Compiler.literal, .infix = null, .precedence = .prec_none }, // token_nil,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_or,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_return,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_super,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_this,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_true,
+    .{ .prefix = Compiler.literal, .infix = null, .precedence = .prec_none }, // token_true,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_while,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_error,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_eof,
@@ -184,11 +184,35 @@ pub const Compiler = struct {
         try self.parsePrecedence(precedence);
 
         switch (operator_type) {
+            .token_bang_equal => {
+                try self.emitOpCode(.op_equal);
+                try self.emitOpCode(.op_not);
+            },
+            .token_equal_equal => try self.emitOpCode(.op_equal),
+            .token_greater => try self.emitOpCode(.op_greater),
+            .token_greater_equal => {
+                try self.emitOpCode(.op_less);
+                try self.emitOpCode(.op_not);
+            },
+            .token_less => try self.emitOpCode(.op_less),
+            .token_less_equal => {
+                try self.emitOpCode(.op_greater);
+                try self.emitOpCode(.op_not);
+            },
             .token_plus => try self.emitOpCode(.op_add),
             .token_minus => try self.emitOpCode(.op_substract),
             .token_star => try self.emitOpCode(.op_multiply),
             .token_slash => try self.emitOpCode(.op_divide),
             else => return,
+        }
+    }
+
+    fn literal(self: *Compiler) !void {
+        switch (self.previous.token_type) {
+            .token_true => try self.emitOpCode(.op_true),
+            .token_false => try self.emitOpCode(.op_false),
+            .token_nil => try self.emitOpCode(.op_nil),
+            else => unreachable,
         }
     }
 
@@ -209,7 +233,8 @@ pub const Compiler = struct {
 
         switch (operator_type) {
             .token_minus => try self.emitOpCode(.op_negate),
-            else => return,
+            .token_bang => try self.emitOpCode(.op_not),
+            else => unreachable,
         }
     }
 

@@ -36,16 +36,6 @@ pub const VM = struct {
         self.stack.deinit();
     }
 
-    fn push(self: *VM, value: Value) !void {
-        try self.stack.append(value);
-        self.stack_top += 1;
-    }
-
-    fn pop(self: *VM) Value {
-        self.stack_top -= 1;
-        return self.stack.pop();
-    }
-
     pub fn interpret(self: *VM, source: []const u8) !void {
         var chunk = Chunk.init(self.allocator);
         defer chunk.deinit();
@@ -62,7 +52,7 @@ pub const VM = struct {
             if (comptime config.debug_trace_execution) {
                 std.debug.print("          ", .{});
                 for (self.stack.items) |item| {
-                    std.debug.print("[ {d} ]", .{item.number});
+                    std.debug.print("[{}]", .{item});
                 }
                 std.debug.print("\n", .{});
 
@@ -72,36 +62,41 @@ pub const VM = struct {
             const instruction: OpCode = @enumFromInt(self.readByte());
             switch (instruction) {
                 .op_return => {
-                    std.debug.print("{d}\n", .{self.pop().number});
+                    std.debug.print("{}\n", .{self.pop()});
                     return;
                 },
                 .op_constant => {
                     const constant = self.readConstant();
                     try self.push(constant);
                 },
+                .op_true => {
+                    try self.push(Value.fromBool(true));
+                },
+                .op_false => {
+                    try self.push(Value.fromBool(false));
+                },
+                .op_nil => {
+                    try self.push(Value.fromNil());
+                },
+                .op_equal => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    try self.push(Value.fromBool(a.equals(b)));
+                },
                 .op_negate => {
-                    const n = self.pop().number;
-                    try self.push(Value{ .number = n });
+                    if (!self.peek(0).isNumber()) {
+                        try self.runtimeErrors("Operand must be a number", .{});
+                        return InterpretError.RuntimeError;
+                    }
+
+                    const n = self.pop().asNumber();
+                    try self.push(Value.fromNumber(-n));
                 },
-                .op_add => {
-                    const b = self.pop().number;
-                    const a = self.pop().number;
-                    try self.push(Value{ .number = a + b });
+                .op_not => {
+                    try self.push(Value.fromBool(self.pop().isFalsy()));
                 },
-                .op_substract => {
-                    const b = self.pop().number;
-                    const a = self.pop().number;
-                    try self.push(Value{ .number = a - b });
-                },
-                .op_multiply => {
-                    const b = self.pop().number;
-                    const a = self.pop().number;
-                    try self.push(Value{ .number = a * b });
-                },
-                .op_divide => {
-                    const b = self.pop().number;
-                    const a = self.pop().number;
-                    try self.push(Value{ .number = a / b });
+                .op_add, .op_substract, .op_multiply, .op_divide, .op_greater, .op_less => {
+                    try self.binaryOperation(instruction);
                 },
             }
         }
@@ -116,5 +111,54 @@ pub const VM = struct {
     inline fn readConstant(self: *VM) Value {
         const index = self.readByte();
         return self.chunk.constants.items[index];
+    }
+
+    fn binaryOperation(self: *VM, op_code: OpCode) !void {
+        if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+            try self.runtimeErrors("Operands must be numbers", .{});
+            return InterpretError.RuntimeError;
+        }
+
+        const b = self.pop().asNumber();
+        const a = self.pop().asNumber();
+        const value = switch (op_code) {
+            .op_add => Value.fromNumber(a + b),
+            .op_substract => Value.fromNumber(a - b),
+            .op_multiply => Value.fromNumber(a * b),
+            .op_divide => Value.fromNumber(a / b),
+            .op_greater => Value.fromBool(a > b),
+            .op_less => Value.fromBool(a < b),
+            else => unreachable,
+        };
+        try self.push(value);
+    }
+
+    fn push(self: *VM, value: Value) !void {
+        try self.stack.append(value);
+        self.stack_top += 1;
+    }
+
+    fn pop(self: *VM) Value {
+        self.stack_top -= 1;
+        return self.stack.pop();
+    }
+
+    fn peek(self: *VM, distance: usize) Value {
+        return self.stack.items[self.stack.items.len - distance - 1];
+    }
+
+    fn resetStack(self: *VM) void {
+        self.stack.clearRetainingCapacity();
+        self.stack_top = 0;
+    }
+
+    fn runtimeErrors(self: *VM, comptime format: []const u8, args: anytype) !void {
+        const stderr = std.io.getStdErr().writer();
+        try stderr.print(format, args);
+        _ = try stderr.write("\n");
+
+        const line = self.chunk.lines.items[self.ip - 1];
+        try stderr.print("[line {d}] in script\n", .{line});
+        self.resetStack();
     }
 };

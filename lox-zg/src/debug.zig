@@ -25,15 +25,22 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
     }
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
-    switch (instruction) {
-        .op_constant => return constantInstruction("OP_CONSTANT", chunk, offset),
-        .op_negate => return simpleInstruction("OP_NEGATE", offset),
-        .op_add => return simpleInstruction("OP_ADD", offset),
-        .op_substract => return simpleInstruction("OP_SUBSTRACT", offset),
-        .op_multiply => return simpleInstruction("OP_MULTIPLY", offset),
-        .op_divide => return simpleInstruction("OP_DIVIDE", offset),
-        .op_return => return simpleInstruction("OP_RETURN", offset),
-    }
+    return switch (instruction) {
+        .op_constant => constantInstruction("OP_CONSTANT", chunk, offset),
+        .op_true => simpleInstruction("OP_TRUE", offset),
+        .op_false => simpleInstruction("OP_FALSE", offset),
+        .op_nil => simpleInstruction("OP_NIL", offset),
+        .op_negate => simpleInstruction("OP_NEGATE", offset),
+        .op_not => simpleInstruction("OP_NOT", offset),
+        .op_add => simpleInstruction("OP_ADD", offset),
+        .op_greater => simpleInstruction("OP_GREATER", offset),
+        .op_equal => simpleInstruction("OP_EQUAL", offset),
+        .op_less => simpleInstruction("OP_LESS", offset),
+        .op_substract => simpleInstruction("OP_SUBSTRACT", offset),
+        .op_multiply => simpleInstruction("OP_MULTIPLY", offset),
+        .op_divide => simpleInstruction("OP_DIVIDE", offset),
+        .op_return => simpleInstruction("OP_RETURN", offset),
+    };
 }
 
 // return the offset for next instruction
