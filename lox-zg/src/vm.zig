@@ -5,6 +5,8 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Chunk = @import("chunk.zig").Chunk;
 const Value = @import("value.zig").Value;
+const Object = @import("object.zig").Object;
+const String = @import("object.zig").String;
 const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 
@@ -18,15 +20,19 @@ pub const VM = struct {
     ip: usize,
     stack: ArrayList(Value),
     stack_top: usize,
-    compiler: *Compiler,
+    objects: ?*Object,
+    compiler: Compiler,
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator, compiler: *Compiler) VM {
+    pub fn init(allocator: Allocator) VM {
+        var compiler = Compiler.init(allocator);
+
         return VM{
             .chunk = undefined,
             .ip = 0,
             .stack = ArrayList(Value).init(allocator),
             .stack_top = 0,
+            .objects = null,
             .compiler = compiler,
             .allocator = allocator,
         };
@@ -34,6 +40,7 @@ pub const VM = struct {
 
     pub fn deinit(self: *VM) void {
         self.stack.deinit();
+        self.compiler.deinit();
     }
 
     pub fn interpret(self: *VM, source: []const u8) !void {
@@ -89,13 +96,16 @@ pub const VM = struct {
                         return InterpretError.RuntimeError;
                     }
 
-                    const n = self.pop().asNumber();
+                    const n = self.pop().number;
                     try self.push(Value.fromNumber(-n));
                 },
                 .op_not => {
                     try self.push(Value.fromBool(self.pop().isFalsy()));
                 },
-                .op_add, .op_substract, .op_multiply, .op_divide, .op_greater, .op_less => {
+                .op_add => {
+                    try self.addOperation();
+                },
+                .op_substract, .op_multiply, .op_divide, .op_greater, .op_less => {
                     try self.binaryOperation(instruction);
                 },
             }
@@ -119,10 +129,9 @@ pub const VM = struct {
             return InterpretError.RuntimeError;
         }
 
-        const b = self.pop().asNumber();
-        const a = self.pop().asNumber();
+        const b = self.pop().number;
+        const a = self.pop().number;
         const value = switch (op_code) {
-            .op_add => Value.fromNumber(a + b),
             .op_substract => Value.fromNumber(a - b),
             .op_multiply => Value.fromNumber(a * b),
             .op_divide => Value.fromNumber(a / b),
@@ -131,6 +140,24 @@ pub const VM = struct {
             else => unreachable,
         };
         try self.push(value);
+    }
+
+    fn addOperation(self: *VM) !void {
+        if (self.peek(0).isString() and self.peek(1).isString()) {
+            const b = self.pop().object.asString();
+            const a = self.pop().object.asString();
+            const buffer = try self.allocator.alloc(u8, a.chars.len + b.chars.len);
+            const joined = try std.fmt.bufPrint(buffer, "{s}{s}", .{ a.chars, b.chars });
+            const string = try String.create(self.allocator, joined);
+            try self.push(Value.fromObject(&string.object));
+        } else if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+            const b = self.pop().number;
+            const a = self.pop().number;
+            try self.push(Value.fromNumber(a + b));
+        } else {
+            try self.runtimeErrors("Operands must be both numbers or strings.", .{});
+            return InterpretError.RuntimeError;
+        }
     }
 
     fn push(self: *VM, value: Value) !void {

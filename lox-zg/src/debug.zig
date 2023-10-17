@@ -52,6 +52,6 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 // return the offset for next instruction
 fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const constant = chunk.code.items[offset + 1];
-    print("{s: <16} {d: >4} '{d}'\n", .{ name, constant, chunk.constants.items[constant].number });
+    print("{s: <16} {d: >4} '{}'\n", .{ name, constant, chunk.constants.items[constant] });
     return offset + 2;
 }

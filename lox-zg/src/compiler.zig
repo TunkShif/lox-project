@@ -2,12 +2,14 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const config = @import("config.zig");
 const Allocator = std.mem.Allocator;
+const ArenaAllocator = std.heap.ArenaAllocator;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
-const Value = @import("value.zig").Value;
 const Token = @import("token.zig").Token;
 const TokenType = @import("token.zig").TokenType;
 const Scanner = @import("scanner.zig").Scanner;
+const Value = @import("value.zig").Value;
+const String = @import("object.zig").String;
 
 const Precedence = enum(u8) {
     prec_none,
@@ -56,7 +58,7 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less,
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less_equal,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_identifier,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_string,
+    .{ .prefix = Compiler.string, .infix = null, .precedence = .prec_none }, // token_string,
     .{ .prefix = Compiler.number, .infix = null, .precedence = .prec_none }, // token_number,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_and,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_class,
@@ -84,8 +86,13 @@ pub const Compiler = struct {
     compiling_chunk: *Chunk,
     had_error: bool,
     panic_mode: bool,
+    arena: ArenaAllocator,
+    allocator: Allocator,
 
-    pub fn init() Compiler {
+    pub fn init(allocator: Allocator) Compiler {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        const arena_allocator = arena.allocator();
+
         const scanner = Scanner.init();
 
         return Compiler{
@@ -95,7 +102,13 @@ pub const Compiler = struct {
             .compiling_chunk = undefined,
             .had_error = false,
             .panic_mode = false,
+            .arena = arena,
+            .allocator = arena_allocator,
         };
+    }
+
+    pub fn deinit(self: *Compiler) void {
+        self.arena.deinit();
     }
 
     pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
@@ -223,7 +236,13 @@ pub const Compiler = struct {
 
     fn number(self: *Compiler) !void {
         const value = std.fmt.parseFloat(f64, self.previous.lexeme) catch 0;
-        try self.emitConstant(Value{ .number = value });
+        try self.emitConstant(Value.fromNumber(value));
+    }
+
+    fn string(self: *Compiler) !void {
+        const lexeme = self.previous.lexeme;
+        const str = try String.create(self.allocator, lexeme[1 .. lexeme.len - 1]);
+        try self.emitConstant(Value.fromObject(&str.object));
     }
 
     fn unary(self: *Compiler) !void {

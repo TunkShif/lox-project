@@ -10,9 +10,9 @@ pub fn main() anyerror!void {
 
     const allocator = gpa.allocator();
 
-    var compiler = Compiler.init();
-    var vm = VM.init(allocator, &compiler);
+    var vm = VM.init(allocator);
     defer vm.deinit();
 
-    vm.interpret("!(5 - 4 > 3 * 2 == !nil)") catch return;
+    vm.interpret("\"hello\"") catch return;
+    // vm.interpret("\"hello\"+\"world\"") catch return;
 }
