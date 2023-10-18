@@ -23,19 +23,19 @@ pub const Value = union(enum) {
         return .nil;
     }
 
-    pub fn isNumber(self: Value) bool {
+    pub fn isNumber(self: @This()) bool {
         return self == .number;
     }
 
-    pub fn isObject(self: Value) bool {
+    pub fn isObject(self: @This()) bool {
         return self == .object;
     }
 
-    pub fn isString(self: Value) bool {
+    pub fn isString(self: @This()) bool {
         return self == .object and self.object.type == .obj_string;
     }
 
-    pub fn isFalsy(self: Value) bool {
+    pub fn isFalsy(self: @This()) bool {
         return switch (self) {
             .nil => true,
             .bool => |value| !value,
@@ -43,7 +43,7 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn equals(self: Value, other: Value) bool {
+    pub fn equals(self: @This(), other: @This()) bool {
         if (!std.mem.eql(u8, @tagName(self), @tagName(other))) return false;
         return switch (self) {
             .nil => true,
@@ -57,7 +57,7 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn format(self: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
         _ = options;
         switch (self) {

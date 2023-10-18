@@ -16,7 +16,7 @@ pub const Object = struct {
     type: ObjectType,
     next: ?*Object = null,
 
-    pub fn asString(self: *Object) *const String {
+    pub fn asString(self: *@This()) *const String {
         return @fieldParentPtr(String, "object", self);
     }
 };

@@ -34,7 +34,7 @@ pub const Scanner = struct {
     current: usize,
     line: usize,
 
-    pub fn init() Scanner {
+    pub fn init() @This() {
         return Scanner{
             .source = undefined,
             .start = 0,
@@ -43,14 +43,14 @@ pub const Scanner = struct {
         };
     }
 
-    pub fn reset(self: *Scanner, source: []const u8) void {
+    pub fn reset(self: *@This(), source: []const u8) void {
         self.source = source;
         self.start = 0;
         self.current = 0;
         self.line = 1;
     }
 
-    pub fn scanToken(self: *Scanner) Token {
+    pub fn scanToken(self: *@This()) Token {
         self.skipWhitespace();
 
         self.start = self.current;
@@ -83,22 +83,22 @@ pub const Scanner = struct {
         }
     }
 
-    fn advance(self: *Scanner) u8 {
+    fn advance(self: *@This()) u8 {
         self.current += 1;
         return self.source[self.current - 1];
     }
 
-    fn peek(self: *Scanner) u8 {
+    fn peek(self: *@This()) u8 {
         if (self.isAtEnd()) return 0;
         return self.source[self.current];
     }
 
-    fn peekNext(self: *Scanner) u8 {
+    fn peekNext(self: *@This()) u8 {
         if (self.current + 1 >= self.source.len) return 0;
         return self.source[self.current + 1];
     }
 
-    fn skipWhitespace(self: *Scanner) void {
+    fn skipWhitespace(self: *@This()) void {
         while (true) {
             const ch = self.peek();
             switch (ch) {
@@ -120,18 +120,18 @@ pub const Scanner = struct {
         }
     }
 
-    fn match(self: *Scanner, expected: u8) bool {
+    fn match(self: *@This(), expected: u8) bool {
         if (self.isAtEnd()) return false;
         if (self.source[self.current] != expected) return false;
         self.current += 1;
         return true;
     }
 
-    fn isAtEnd(self: *Scanner) bool {
+    fn isAtEnd(self: *@This()) bool {
         return self.current >= self.source.len;
     }
 
-    fn makeToken(self: *Scanner, token_type: TokenType) Token {
+    fn makeToken(self: *@This(), token_type: TokenType) Token {
         return Token{
             .token_type = token_type,
             .lexeme = self.source[self.start..self.current],
@@ -139,7 +139,7 @@ pub const Scanner = struct {
         };
     }
 
-    fn errorToken(self: *Scanner, message: []const u8) Token {
+    fn errorToken(self: *@This(), message: []const u8) Token {
         return Token{
             .token_type = TokenType.token_error,
             .lexeme = message,
@@ -147,7 +147,7 @@ pub const Scanner = struct {
         };
     }
 
-    fn string(self: *Scanner) Token {
+    fn string(self: *@This()) Token {
         while (self.peek() != '"' and !self.isAtEnd()) {
             if (self.peek() == '\n') self.line += 1;
             _ = self.advance();
@@ -159,7 +159,7 @@ pub const Scanner = struct {
         return self.makeToken(.token_string);
     }
 
-    fn number(self: *Scanner) Token {
+    fn number(self: *@This()) Token {
         while (isDigit(self.peek())) _ = self.advance();
 
         if (self.peek() == '.' and isDigit(self.peekNext())) {
@@ -170,7 +170,7 @@ pub const Scanner = struct {
         return self.makeToken(.token_number);
     }
 
-    fn identifer(self: *Scanner) Token {
+    fn identifer(self: *@This()) Token {
         while (isAlpha(self.peek()) or isDigit(self.peek())) _ = self.advance();
         const lexeme = self.source[self.start..self.current];
         const token_type = KEYWORDS.get(lexeme) orelse .token_identifier;

@@ -25,7 +25,7 @@ pub const Chunk = struct {
     lines: ArrayList(usize),
     constants: ArrayList(Value),
 
-    pub fn init(allocator: Allocator) Chunk {
+    pub fn init(allocator: Allocator) @This() {
         return Chunk{
             .code = ArrayList(u8).init(allocator),
             .lines = ArrayList(usize).init(allocator),
@@ -33,18 +33,18 @@ pub const Chunk = struct {
         };
     }
 
-    pub fn deinit(self: *Chunk) void {
+    pub fn deinit(self: *@This()) void {
         self.code.deinit();
         self.lines.deinit();
         self.constants.deinit();
     }
 
-    pub fn writeChunk(self: *Chunk, byte: u8, line: usize) !void {
+    pub fn writeChunk(self: *@This(), byte: u8, line: usize) !void {
         try self.code.append(byte);
         try self.lines.append(line);
     }
 
-    pub fn addConstant(self: *Chunk, value: Value) !usize {
+    pub fn addConstant(self: *@This(), value: Value) !usize {
         try self.constants.append(value);
         return self.constants.items.len - 1;
     }

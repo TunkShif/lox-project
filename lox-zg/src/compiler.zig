@@ -88,7 +88,7 @@ pub const Compiler = struct {
     panic_mode: bool,
     object_pool: *ObjectPool,
 
-    pub fn init(object_pool: *ObjectPool) Compiler {
+    pub fn init(object_pool: *ObjectPool) @This() {
         const scanner = Scanner.init();
 
         return Compiler{
@@ -102,7 +102,7 @@ pub const Compiler = struct {
         };
     }
 
-    pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
+    pub fn compile(self: *@This(), source: []const u8, chunk: *Chunk) !bool {
         self.scanner.reset(source);
         self.compiling_chunk = chunk;
 
@@ -117,7 +117,7 @@ pub const Compiler = struct {
         return !self.had_error;
     }
 
-    fn advance(self: *Compiler) void {
+    fn advance(self: *@This()) void {
         self.previous = self.current;
         while (true) {
             self.current = self.scanner.scanToken();
@@ -129,7 +129,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn consume(self: *Compiler, token_type: TokenType, message: []const u8) void {
+    fn consume(self: *@This(), token_type: TokenType, message: []const u8) void {
         if (self.current.token_type == token_type) {
             self.advance();
             return;
@@ -137,28 +137,28 @@ pub const Compiler = struct {
         self.errorsAtCurrent(message);
     }
 
-    fn currentChunk(self: *Compiler) *Chunk {
+    fn currentChunk(self: *@This()) *Chunk {
         return self.compiling_chunk;
     }
 
-    fn emitByte(self: *Compiler, byte: u8) !void {
+    fn emitByte(self: *@This(), byte: u8) !void {
         try self.currentChunk().writeChunk(byte, self.previous.line);
     }
 
-    fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) !void {
+    fn emitBytes(self: *@This(), byte1: u8, byte2: u8) !void {
         try self.emitByte(byte1);
         try self.emitByte(byte2);
     }
 
-    fn emitOpCode(self: *Compiler, op_code: OpCode) !void {
+    fn emitOpCode(self: *@This(), op_code: OpCode) !void {
         try self.emitByte(@intFromEnum(op_code));
     }
 
-    fn emitReturn(self: *Compiler) !void {
+    fn emitReturn(self: *@This()) !void {
         try self.emitOpCode(.op_return);
     }
 
-    fn makeConstant(self: *Compiler, value: Value) !u8 {
+    fn makeConstant(self: *@This(), value: Value) !u8 {
         const constant = try self.currentChunk().addConstant(value);
         if (constant > std.math.maxInt(u8)) {
             self.errors("Reached constant size limit in a chunk.");
@@ -167,11 +167,11 @@ pub const Compiler = struct {
         return @intCast(constant);
     }
 
-    fn emitConstant(self: *Compiler, value: Value) !void {
+    fn emitConstant(self: *@This(), value: Value) !void {
         try self.emitBytes(@intFromEnum(OpCode.op_constant), try self.makeConstant(value));
     }
 
-    fn endCompiler(self: *Compiler) !void {
+    fn endCompiler(self: *@This()) !void {
         try self.emitReturn();
 
         if (comptime config.debug_print_code) {
@@ -181,7 +181,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn binary(self: *Compiler) !void {
+    fn binary(self: *@This()) !void {
         const operator_type = self.previous.token_type;
         const rule = ParseRule.getRule(operator_type);
         const precedence: Precedence = @enumFromInt(@intFromEnum(rule.precedence) + 1);
@@ -211,7 +211,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn literal(self: *Compiler) !void {
+    fn literal(self: *@This()) !void {
         switch (self.previous.token_type) {
             .token_true => try self.emitOpCode(.op_true),
             .token_false => try self.emitOpCode(.op_false),
@@ -220,24 +220,24 @@ pub const Compiler = struct {
         }
     }
 
-    fn grouping(self: *Compiler) !void {
+    fn grouping(self: *@This()) !void {
         try self.expression();
         self.consume(.token_rparen, "Expect ')' after expression.");
     }
 
-    fn number(self: *Compiler) !void {
+    fn number(self: *@This()) !void {
         const value = std.fmt.parseFloat(f64, self.previous.lexeme) catch 0;
         try self.emitConstant(Value.fromNumber(value));
     }
 
-    fn string(self: *Compiler) !void {
+    fn string(self: *@This()) !void {
         const lexeme = self.previous.lexeme;
         const str = try self.object_pool.createString(lexeme[1 .. lexeme.len - 1]);
         str.is_owned = false;
         try self.emitConstant(Value.fromObject(&str.object));
     }
 
-    fn unary(self: *Compiler) !void {
+    fn unary(self: *@This()) !void {
         const operator_type = self.previous.token_type;
 
         try self.parsePrecedence(.prec_unary);
@@ -249,11 +249,11 @@ pub const Compiler = struct {
         }
     }
 
-    fn expression(self: *Compiler) !void {
+    fn expression(self: *@This()) !void {
         try self.parsePrecedence(.prec_assignment);
     }
 
-    fn parsePrecedence(self: *Compiler, precedence: Precedence) !void {
+    fn parsePrecedence(self: *@This(), precedence: Precedence) !void {
         self.advance();
 
         if (ParseRule.getRule(self.previous.token_type).prefix) |prefixRule| {
@@ -270,15 +270,15 @@ pub const Compiler = struct {
         }
     }
 
-    fn errors(self: *Compiler, message: []const u8) void {
+    fn errors(self: *@This(), message: []const u8) void {
         self.errorsAt(&self.previous, message);
     }
 
-    fn errorsAtCurrent(self: *Compiler, message: []const u8) void {
+    fn errorsAtCurrent(self: *@This(), message: []const u8) void {
         self.errorsAt(&self.current, message);
     }
 
-    fn errorsAt(self: *Compiler, token: *Token, message: []const u8) void {
+    fn errorsAt(self: *@This(), token: *Token, message: []const u8) void {
         if (self.panic_mode) return;
         self.panic_mode = true;
 
