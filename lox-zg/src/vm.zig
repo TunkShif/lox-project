@@ -9,6 +9,7 @@ const Object = @import("object.zig").Object;
 const String = @import("object.zig").String;
 const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
+const ObjectPool = @import("object.zig").ObjectPool;
 
 const InterpretError = error{
     CompileError,
@@ -20,30 +21,33 @@ pub const VM = struct {
     ip: usize,
     stack: ArrayList(Value),
     stack_top: usize,
-    objects: ?*Object,
     compiler: Compiler,
+    object_pool: *ObjectPool,
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator) VM {
-        var compiler = Compiler.init(allocator);
+    pub fn init(allocator: Allocator) !@This() {
+        const object_pool = try allocator.create(ObjectPool);
+        object_pool.* = ObjectPool.init(allocator);
+        var compiler = Compiler.init(object_pool);
 
         return VM{
             .chunk = undefined,
             .ip = 0,
             .stack = ArrayList(Value).init(allocator),
             .stack_top = 0,
-            .objects = null,
             .compiler = compiler,
             .allocator = allocator,
+            .object_pool = object_pool,
         };
     }
 
-    pub fn deinit(self: *VM) void {
+    pub fn deinit(self: *@This()) void {
         self.stack.deinit();
-        self.compiler.deinit();
+        self.object_pool.deinit();
+        self.allocator.destroy(self.object_pool);
     }
 
-    pub fn interpret(self: *VM, source: []const u8) !void {
+    pub fn interpret(self: *@This(), source: []const u8) !void {
         var chunk = Chunk.init(self.allocator);
         defer chunk.deinit();
         _ = try self.compiler.compile(source, &chunk);
@@ -54,7 +58,7 @@ pub const VM = struct {
         try self.run();
     }
 
-    fn run(self: *VM) !void {
+    fn run(self: *@This()) !void {
         while (true) {
             if (comptime config.debug_trace_execution) {
                 std.debug.print("          ", .{});
@@ -112,18 +116,18 @@ pub const VM = struct {
         }
     }
 
-    inline fn readByte(self: *VM) u8 {
+    inline fn readByte(self: *@This()) u8 {
         const byte = self.chunk.code.items[self.ip];
         self.ip += 1;
         return byte;
     }
 
-    inline fn readConstant(self: *VM) Value {
+    inline fn readConstant(self: *@This()) Value {
         const index = self.readByte();
         return self.chunk.constants.items[index];
     }
 
-    fn binaryOperation(self: *VM, op_code: OpCode) !void {
+    fn binaryOperation(self: *@This(), op_code: OpCode) !void {
         if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
             try self.runtimeErrors("Operands must be numbers", .{});
             return InterpretError.RuntimeError;
@@ -142,13 +146,13 @@ pub const VM = struct {
         try self.push(value);
     }
 
-    fn addOperation(self: *VM) !void {
+    fn addOperation(self: *@This()) !void {
         if (self.peek(0).isString() and self.peek(1).isString()) {
             const b = self.pop().object.asString();
             const a = self.pop().object.asString();
             const buffer = try self.allocator.alloc(u8, a.chars.len + b.chars.len);
             const joined = try std.fmt.bufPrint(buffer, "{s}{s}", .{ a.chars, b.chars });
-            const string = try String.create(self.allocator, joined);
+            const string = try self.object_pool.createString(joined);
             try self.push(Value.fromObject(&string.object));
         } else if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
             const b = self.pop().number;
@@ -160,26 +164,26 @@ pub const VM = struct {
         }
     }
 
-    fn push(self: *VM, value: Value) !void {
+    fn push(self: *@This(), value: Value) !void {
         try self.stack.append(value);
         self.stack_top += 1;
     }
 
-    fn pop(self: *VM) Value {
+    fn pop(self: *@This()) Value {
         self.stack_top -= 1;
         return self.stack.pop();
     }
 
-    fn peek(self: *VM, distance: usize) Value {
+    fn peek(self: *@This(), distance: usize) Value {
         return self.stack.items[self.stack.items.len - distance - 1];
     }
 
-    fn resetStack(self: *VM) void {
+    fn resetStack(self: *@This()) void {
         self.stack.clearRetainingCapacity();
         self.stack_top = 0;
     }
 
-    fn runtimeErrors(self: *VM, comptime format: []const u8, args: anytype) !void {
+    fn runtimeErrors(self: *@This(), comptime format: []const u8, args: anytype) !void {
         const stderr = std.io.getStdErr().writer();
         try stderr.print(format, args);
         _ = try stderr.write("\n");

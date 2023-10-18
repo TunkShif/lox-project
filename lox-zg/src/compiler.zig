@@ -2,7 +2,6 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const config = @import("config.zig");
 const Allocator = std.mem.Allocator;
-const ArenaAllocator = std.heap.ArenaAllocator;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Token = @import("token.zig").Token;
@@ -10,6 +9,7 @@ const TokenType = @import("token.zig").TokenType;
 const Scanner = @import("scanner.zig").Scanner;
 const Value = @import("value.zig").Value;
 const String = @import("object.zig").String;
+const ObjectPool = @import("object.zig").ObjectPool;
 
 const Precedence = enum(u8) {
     prec_none,
@@ -86,13 +86,9 @@ pub const Compiler = struct {
     compiling_chunk: *Chunk,
     had_error: bool,
     panic_mode: bool,
-    arena: ArenaAllocator,
-    allocator: Allocator,
+    object_pool: *ObjectPool,
 
-    pub fn init(allocator: Allocator) Compiler {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        const arena_allocator = arena.allocator();
-
+    pub fn init(object_pool: *ObjectPool) Compiler {
         const scanner = Scanner.init();
 
         return Compiler{
@@ -102,13 +98,8 @@ pub const Compiler = struct {
             .compiling_chunk = undefined,
             .had_error = false,
             .panic_mode = false,
-            .arena = arena,
-            .allocator = arena_allocator,
+            .object_pool = object_pool,
         };
-    }
-
-    pub fn deinit(self: *Compiler) void {
-        self.arena.deinit();
     }
 
     pub fn compile(self: *Compiler, source: []const u8, chunk: *Chunk) !bool {
@@ -241,7 +232,8 @@ pub const Compiler = struct {
 
     fn string(self: *Compiler) !void {
         const lexeme = self.previous.lexeme;
-        const str = try String.create(self.allocator, lexeme[1 .. lexeme.len - 1]);
+        const str = try self.object_pool.createString(lexeme[1 .. lexeme.len - 1]);
+        str.is_owned = false;
         try self.emitConstant(Value.fromObject(&str.object));
     }
 

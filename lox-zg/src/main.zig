@@ -10,9 +10,8 @@ pub fn main() anyerror!void {
 
     const allocator = gpa.allocator();
 
-    var vm = VM.init(allocator);
+    var vm = try VM.init(allocator);
     defer vm.deinit();
 
-    vm.interpret("\"hello\"") catch return;
-    // vm.interpret("\"hello\"+\"world\"") catch return;
+    vm.interpret("\"hello\"+\"world\"") catch return;
 }
