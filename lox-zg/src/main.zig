@@ -11,5 +11,11 @@ pub fn main() anyerror!void {
     var vm = try VM.init(allocator);
     defer vm.deinit();
 
-    vm.interpret("\"hello\"+\"world\"") catch return;
+    const source =
+        \\let greeting = "hola ";
+        \\let name = "mundo";
+        \\greeting + name;
+    ;
+
+    vm.interpret(source) catch return;
 }

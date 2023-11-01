@@ -2,6 +2,7 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const config = @import("config.zig");
 const ArrayList = std.ArrayList;
+const StringHashMap = std.StringHashMap;
 const Allocator = std.mem.Allocator;
 const Chunk = @import("chunk.zig").Chunk;
 const Value = @import("value.zig").Value;
@@ -21,6 +22,7 @@ pub const VM = struct {
     ip: usize,
     stack: ArrayList(Value),
     stack_top: usize,
+    globals: StringHashMap(Value),
     compiler: Compiler,
     object_pool: *ObjectPool,
     allocator: Allocator,
@@ -35,6 +37,7 @@ pub const VM = struct {
             .ip = 0,
             .stack = ArrayList(Value).init(allocator),
             .stack_top = 0,
+            .globals = StringHashMap(Value).init(allocator),
             .compiler = compiler,
             .allocator = allocator,
             .object_pool = object_pool,
@@ -43,6 +46,7 @@ pub const VM = struct {
 
     pub fn deinit(self: *@This()) void {
         self.stack.deinit();
+        self.globals.deinit();
         self.object_pool.deinit();
         self.allocator.destroy(self.object_pool);
     }
@@ -73,7 +77,7 @@ pub const VM = struct {
             const instruction: OpCode = @enumFromInt(self.readByte());
             switch (instruction) {
                 .op_return => {
-                    std.debug.print("{}\n", .{self.pop()});
+                    // TODO: do nothing right now
                     return;
                 },
                 .op_constant => {
@@ -88,6 +92,22 @@ pub const VM = struct {
                 },
                 .op_nil => {
                     try self.push(Value.fromNil());
+                },
+                .op_pop => {
+                    _ = self.pop();
+                },
+                .op_get_global => {
+                    const name = self.readConstant().object.asString();
+                    if (self.globals.get(name.chars)) |value| {
+                        try self.push(value);
+                    } else {
+                        try self.runtimeErrors("Undefined variable {s}", .{name.chars});
+                    }
+                },
+                .op_define_global => {
+                    const str = self.readConstant().object.asString();
+                    try self.globals.put(str.chars, self.peek(0));
+                    _ = self.pop();
                 },
                 .op_equal => {
                     const b = self.pop();

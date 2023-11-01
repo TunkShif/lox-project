@@ -57,7 +57,7 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_greater_equal,
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less,
     .{ .prefix = null, .infix = Compiler.binary, .precedence = .prec_comparison }, // token_less_equal,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_identifier,
+    .{ .prefix = Compiler.variable, .infix = null, .precedence = .prec_none }, // token_identifier,
     .{ .prefix = Compiler.string, .infix = null, .precedence = .prec_none }, // token_string,
     .{ .prefix = Compiler.number, .infix = null, .precedence = .prec_none }, // token_number,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_and,
@@ -110,8 +110,10 @@ pub const Compiler = struct {
         self.panic_mode = false;
 
         self.advance();
-        try self.expression();
-        self.consume(.token_eof, "Expected end of expression.");
+
+        while (!self.match(.token_eof)) {
+            try self.declaration();
+        }
 
         try self.endCompiler();
         return !self.had_error;
@@ -135,6 +137,18 @@ pub const Compiler = struct {
             return;
         }
         self.errorsAtCurrent(message);
+    }
+
+    fn match(self: *@This(), token_type: TokenType) bool {
+        if (!self.check(token_type)) {
+            return false;
+        }
+        self.advance();
+        return true;
+    }
+
+    fn check(self: *@This(), token_type: TokenType) bool {
+        return self.current.token_type == token_type;
     }
 
     fn currentChunk(self: *@This()) *Chunk {
@@ -237,6 +251,15 @@ pub const Compiler = struct {
         try self.emitConstant(Value.fromObject(&str.object));
     }
 
+    fn namedVariable(self: *@This(), name: Token) !void {
+        const arg = try self.identifierConstant(&name);
+        try self.emitBytes(@intFromEnum(OpCode.op_get_global), arg);
+    }
+
+    fn variable(self: *@This()) !void {
+        try self.namedVariable(self.previous);
+    }
+
     fn unary(self: *@This()) !void {
         const operator_type = self.previous.token_type;
 
@@ -251,6 +274,53 @@ pub const Compiler = struct {
 
     fn expression(self: *@This()) !void {
         try self.parsePrecedence(.prec_assignment);
+    }
+
+    fn varDeclaration(self: *@This()) !void {
+        const global = try self.parseVariable("Expect variable name.");
+
+        if (self.match(.token_equal)) {
+            try self.expression();
+        } else {
+            try self.emitOpCode(.op_nil);
+        }
+
+        self.consume(.token_semicolon, "Expect ';' after variable declaration.");
+        try self.defineVariable(global);
+    }
+
+    fn declaration(self: *@This()) !void {
+        if (self.match(.token_let)) {
+            try self.varDeclaration();
+        } else {
+            try self.statement();
+        }
+
+        if (self.panic_mode) {
+            self.synchronize();
+        }
+    }
+
+    fn statement(self: *@This()) !void {
+        try self.expressionStatement();
+    }
+
+    fn expressionStatement(self: *@This()) !void {
+        try self.expression();
+        self.consume(.token_semicolon, "Expect ';' after expression");
+        try self.emitOpCode(.op_pop);
+    }
+
+    fn synchronize(self: *@This()) void {
+        self.panic_mode = false;
+        while (self.current.token_type != .token_eof) {
+            if (self.previous.token_type == .token_semicolon) return;
+            switch (self.current.token_type) {
+                .token_class, .token_def, .token_let, .token_for, .token_if, .token_while, .token_return => return,
+                else => {},
+            }
+            self.advance();
+        }
     }
 
     fn parsePrecedence(self: *@This(), precedence: Precedence) !void {
@@ -268,6 +338,21 @@ pub const Compiler = struct {
             self.errors("Expect expression.");
             return;
         }
+    }
+
+    fn identifierConstant(self: *@This(), name: *const Token) !u8 {
+        const str = try self.object_pool.createString(name.lexeme);
+        str.is_owned = false;
+        return self.makeConstant(Value.fromObject(&str.object));
+    }
+
+    fn parseVariable(self: *@This(), error_message: []const u8) !u8 {
+        self.consume(.token_identifier, error_message);
+        return self.identifierConstant(&self.previous);
+    }
+
+    fn defineVariable(self: *@This(), global: u8) !void {
+        try self.emitBytes(@intFromEnum(OpCode.op_define_global), global);
     }
 
     fn errors(self: *@This(), message: []const u8) void {
