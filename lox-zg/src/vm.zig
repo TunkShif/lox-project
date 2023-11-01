@@ -109,6 +109,14 @@ pub const VM = struct {
                     try self.globals.put(str.chars, self.peek(0));
                     _ = self.pop();
                 },
+                .op_set_global => {
+                    const name = self.readConstant().object.asString();
+                    if (self.globals.contains(name.chars)) {
+                        try self.globals.put(name.chars, self.peek(0));
+                    } else {
+                        try self.runtimeErrors("Undefined variable {s}.", .{name.chars});
+                    }
+                },
                 .op_equal => {
                     const b = self.pop();
                     const a = self.pop();
@@ -211,5 +219,7 @@ pub const VM = struct {
         const line = self.chunk.lines.items[self.ip - 1];
         try stderr.print("[line {d}] in script\n", .{line});
         self.resetStack();
+
+        return InterpretError.RuntimeError;
     }
 };

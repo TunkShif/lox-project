@@ -12,9 +12,9 @@ pub fn main() anyerror!void {
     defer vm.deinit();
 
     const source =
-        \\let greeting = "hola ";
-        \\let name = "mundo";
-        \\greeting + name;
+        \\let text = "hola ";
+        \\text = text + "mundo";
+        \\text;
     ;
 
     vm.interpret(source) catch return;

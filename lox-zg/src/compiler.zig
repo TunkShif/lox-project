@@ -25,7 +25,7 @@ const Precedence = enum(u8) {
     prec_primary,
 };
 
-const ParseFn = *const fn (compiler: *Compiler) anyerror!void;
+const ParseFn = *const fn (compiler: *Compiler, can_assign: bool) anyerror!void;
 
 const ParseRule = struct {
     prefix: ?ParseFn,
@@ -195,7 +195,9 @@ pub const Compiler = struct {
         }
     }
 
-    fn binary(self: *@This()) !void {
+    fn binary(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         const operator_type = self.previous.token_type;
         const rule = ParseRule.getRule(operator_type);
         const precedence: Precedence = @enumFromInt(@intFromEnum(rule.precedence) + 1);
@@ -225,7 +227,9 @@ pub const Compiler = struct {
         }
     }
 
-    fn literal(self: *@This()) !void {
+    fn literal(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         switch (self.previous.token_type) {
             .token_true => try self.emitOpCode(.op_true),
             .token_false => try self.emitOpCode(.op_false),
@@ -234,33 +238,47 @@ pub const Compiler = struct {
         }
     }
 
-    fn grouping(self: *@This()) !void {
+    fn grouping(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         try self.expression();
         self.consume(.token_rparen, "Expect ')' after expression.");
     }
 
-    fn number(self: *@This()) !void {
+    fn number(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         const value = std.fmt.parseFloat(f64, self.previous.lexeme) catch 0;
         try self.emitConstant(Value.fromNumber(value));
     }
 
-    fn string(self: *@This()) !void {
+    fn string(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         const lexeme = self.previous.lexeme;
         const str = try self.object_pool.createString(lexeme[1 .. lexeme.len - 1]);
         str.is_owned = false;
         try self.emitConstant(Value.fromObject(&str.object));
     }
 
-    fn namedVariable(self: *@This(), name: Token) !void {
+    fn namedVariable(self: *@This(), name: Token, can_assign: bool) !void {
         const arg = try self.identifierConstant(&name);
-        try self.emitBytes(@intFromEnum(OpCode.op_get_global), arg);
+
+        if (can_assign and self.match(.token_equal)) {
+            try self.expression();
+            try self.emitBytes(@intFromEnum(OpCode.op_set_global), arg);
+        } else {
+            try self.emitBytes(@intFromEnum(OpCode.op_get_global), arg);
+        }
     }
 
-    fn variable(self: *@This()) !void {
-        try self.namedVariable(self.previous);
+    fn variable(self: *@This(), can_assign: bool) !void {
+        try self.namedVariable(self.previous, can_assign);
     }
 
-    fn unary(self: *@This()) !void {
+    fn unary(self: *@This(), can_assign: bool) !void {
+        _ = can_assign;
+
         const operator_type = self.previous.token_type;
 
         try self.parsePrecedence(.prec_unary);
@@ -327,12 +345,17 @@ pub const Compiler = struct {
         self.advance();
 
         if (ParseRule.getRule(self.previous.token_type).prefix) |prefixRule| {
-            try prefixRule(self);
+            const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.prec_assignment);
+            try prefixRule(self, can_assign);
 
             while (@intFromEnum(ParseRule.getRule(self.current.token_type).precedence) >= @intFromEnum(precedence)) {
                 self.advance();
                 const infixRule = ParseRule.getRule(self.previous.token_type).infix.?;
-                try infixRule(self);
+                try infixRule(self, can_assign);
+            }
+
+            if (can_assign and self.match(.token_equal)) {
+                self.errors("Invalid assignment target.");
             }
         } else {
             self.errors("Expect expression.");
