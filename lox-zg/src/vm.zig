@@ -96,6 +96,17 @@ pub const VM = struct {
                 .op_pop => {
                     _ = self.pop();
                 },
+                .op_get_local => {
+                    // althought the local variable value already lives in the stack lower somewhere
+                    // we still have to push it to the top of the stack, since other op codes only
+                    // search for data at the top of the stack
+                    const slot = self.readByte();
+                    try self.push(self.stack.items[slot]);
+                },
+                .op_set_local => {
+                    const slot = self.readByte();
+                    self.stack.items[slot] = self.peek(0);
+                },
                 .op_get_global => {
                     const name = self.readConstant().object.asString();
                     if (self.globals.get(name.chars)) |value| {

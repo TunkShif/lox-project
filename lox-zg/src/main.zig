@@ -1,5 +1,4 @@
 const std = @import("std");
-const Compiler = @import("compiler.zig").Compiler;
 const VM = @import("vm.zig").VM;
 
 pub fn main() anyerror!void {
@@ -12,9 +11,16 @@ pub fn main() anyerror!void {
     defer vm.deinit();
 
     const source =
-        \\let text = "hola ";
-        \\text = text + "mundo";
-        \\text;
+        \\let outer = "first";
+        \\{
+        \\  let captured = outer;
+        \\  let inner = captured + " and second";
+        \\  let outer = "redefined";
+        \\  {
+        \\  let nested = "another layer";
+        \\  }
+        \\}
+        \\captured;
     ;
 
     vm.interpret(source) catch return;

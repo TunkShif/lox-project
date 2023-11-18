@@ -6,7 +6,7 @@ Tree-walking interpreter written in Kotlin and bytecode virtual machine written 
 
 - [x] `lox-kt`
 - [ ] `lox-zg`
-  - [ ] local-scoped variable
+  - [x] local-scoped variable
   - [ ] control flow
   - [ ] function and closure
   - [ ] garbage collector

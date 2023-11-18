@@ -79,11 +79,21 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_eof,
 };
 
+const max_local_count = std.math.maxInt(u8) + 1;
+
+const Local = struct {
+    name: Token = undefined,
+    depth: isize = 0,
+};
+
 pub const Compiler = struct {
     scanner: Scanner,
     previous: Token,
     current: Token,
     compiling_chunk: *Chunk,
+    locals: [max_local_count]Local,
+    local_count: isize,
+    scope_depth: usize,
     had_error: bool,
     panic_mode: bool,
     object_pool: *ObjectPool,
@@ -96,6 +106,9 @@ pub const Compiler = struct {
             .previous = undefined,
             .current = undefined,
             .compiling_chunk = undefined,
+            .locals = [_]Local{undefined} ** max_local_count,
+            .local_count = 0,
+            .scope_depth = 0,
             .had_error = false,
             .panic_mode = false,
             .object_pool = object_pool,
@@ -195,6 +208,20 @@ pub const Compiler = struct {
         }
     }
 
+    fn beginScope(self: *@This()) void {
+        self.scope_depth += 1;
+    }
+
+    fn endScope(self: *@This()) !void {
+        self.scope_depth -= 1;
+
+        // pop all variables in current scope when leaving a scope
+        while (self.local_count > 0 and self.locals[@intCast(self.local_count - 1)].depth > self.scope_depth) {
+            try self.emitOpCode(.op_pop);
+            self.local_count -= 1;
+        }
+    }
+
     fn binary(self: *@This(), can_assign: bool) !void {
         _ = can_assign;
 
@@ -262,13 +289,26 @@ pub const Compiler = struct {
     }
 
     fn namedVariable(self: *@This(), name: Token, can_assign: bool) !void {
-        const arg = try self.identifierConstant(&name);
+        var get_op: u8 = 0;
+        var set_op: u8 = 0;
+
+        // returns -1 when it is a global variable
+        var arg = self.resolveLocal(&name);
+
+        if (arg != -1) {
+            get_op = @intFromEnum(OpCode.op_get_local);
+            set_op = @intFromEnum(OpCode.op_set_local);
+        } else {
+            arg = try self.identifierConstant(&name);
+            get_op = @intFromEnum(OpCode.op_get_global);
+            set_op = @intFromEnum(OpCode.op_set_global);
+        }
 
         if (can_assign and self.match(.token_equal)) {
             try self.expression();
-            try self.emitBytes(@intFromEnum(OpCode.op_set_global), arg);
+            try self.emitBytes(set_op, @intCast(arg));
         } else {
-            try self.emitBytes(@intFromEnum(OpCode.op_get_global), arg);
+            try self.emitBytes(get_op, @intCast(arg));
         }
     }
 
@@ -294,6 +334,13 @@ pub const Compiler = struct {
         try self.parsePrecedence(.prec_assignment);
     }
 
+    fn block(self: *@This()) !void {
+        while (!self.check(.token_rbrace) and !self.check(.token_eof)) {
+            try self.declaration();
+        }
+        self.consume(.token_rbrace, "Expect '}' after block.");
+    }
+
     fn varDeclaration(self: *@This()) !void {
         const global = try self.parseVariable("Expect variable name.");
 
@@ -307,7 +354,8 @@ pub const Compiler = struct {
         try self.defineVariable(global);
     }
 
-    fn declaration(self: *@This()) !void {
+    // compiler complains when inferring error sets for mutual recursive function
+    fn declaration(self: *@This()) anyerror!void {
         if (self.match(.token_let)) {
             try self.varDeclaration();
         } else {
@@ -320,7 +368,13 @@ pub const Compiler = struct {
     }
 
     fn statement(self: *@This()) !void {
-        try self.expressionStatement();
+        if (self.match(.token_lbrace)) {
+            self.beginScope();
+            try self.block();
+            try self.endScope();
+        } else {
+            try self.expressionStatement();
+        }
     }
 
     fn expressionStatement(self: *@This()) !void {
@@ -369,12 +423,80 @@ pub const Compiler = struct {
         return self.makeConstant(Value.fromObject(&str.object));
     }
 
+    fn identifierEqual(self: *@This(), a: *const Token, b: *const Token) bool {
+        _ = self;
+        if (a.lexeme.len != b.lexeme.len) return false;
+        return std.mem.eql(u8, a.lexeme, b.lexeme);
+    }
+
+    fn resolveLocal(self: *@This(), name: *const Token) isize {
+        var i = self.local_count - 1;
+        while (i >= 0) : (i -= 1) {
+            const local = &self.locals[@intCast(i)];
+
+            if (self.identifierEqual(name, &local.name)) {
+                if (local.depth == -1) {
+                    self.errors("Cannot read local variable in its own initializer");
+                }
+                return @intCast(i);
+            }
+        }
+
+        return -1;
+    }
+
+    fn addLocal(self: *@This(), name: Token) void {
+        if (self.local_count == max_local_count) {
+            return self.errors("Too many local variables in function.");
+        }
+
+        const local = &self.locals[@intCast(self.local_count)];
+
+        // use depth -1 to represent an uninitialized variable
+        local.depth = -1;
+        local.name = name;
+        self.local_count += 1;
+    }
+
+    fn declareVariable(self: *@This()) void {
+        if (self.scope_depth == 0) return;
+        const name = &self.previous;
+
+        var i = self.local_count - 1;
+        while (i >= 0) : (i -= 1) {
+            const local = &self.locals[@intCast(i)];
+
+            // skip when there's no variable declared in the current scope
+            if (local.depth != -1 and local.depth < self.scope_depth) break;
+
+            // error when there's more than one variable with the same name in one scope
+            if (self.identifierEqual(name, &local.name)) {
+                self.errors("A variable with the same name already exists in current scope.");
+            }
+        }
+
+        self.addLocal(name.*);
+    }
+
     fn parseVariable(self: *@This(), error_message: []const u8) !u8 {
         self.consume(.token_identifier, error_message);
+
+        self.declareVariable();
+        if (self.scope_depth > 0) return 0;
+
         return self.identifierConstant(&self.previous);
     }
 
+    fn markInitialized(self: *@This()) void {
+        // overwrite the uninitialized -1 depth with the current scope depth
+        self.locals[@intCast(self.local_count - 1)].depth = @intCast(self.scope_depth);
+    }
+
     fn defineVariable(self: *@This(), global: u8) !void {
+        if (self.scope_depth > 0) {
+            self.markInitialized();
+            return;
+        }
         try self.emitBytes(@intFromEnum(OpCode.op_define_global), global);
     }
 
@@ -386,7 +508,7 @@ pub const Compiler = struct {
         self.errorsAt(&self.current, message);
     }
 
-    fn errorsAt(self: *@This(), token: *Token, message: []const u8) void {
+    fn errorsAt(self: *@This(), token: *const Token, message: []const u8) void {
         if (self.panic_mode) return;
         self.panic_mode = true;
 
