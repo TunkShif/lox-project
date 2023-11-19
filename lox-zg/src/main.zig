@@ -20,6 +20,7 @@ pub fn main() anyerror!void {
         \\  let nested = "another layer";
         \\  }
         \\}
+        \\let sum = 1 + 2 + 3;
         \\captured;
     ;
 

@@ -1,7 +1,6 @@
 const std = @import("std");
 const debug = @import("debug.zig");
 const config = @import("config.zig");
-const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 const Allocator = std.mem.Allocator;
 const Chunk = @import("chunk.zig").Chunk;
@@ -12,6 +11,8 @@ const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 const ObjectPool = @import("object.zig").ObjectPool;
 
+const stack_max = 256;
+
 const InterpretError = error{
     CompileError,
     RuntimeError,
@@ -20,7 +21,7 @@ const InterpretError = error{
 pub const VM = struct {
     chunk: *Chunk,
     ip: usize,
-    stack: ArrayList(Value),
+    stack: [stack_max](Value),
     stack_top: usize,
     globals: StringHashMap(Value),
     compiler: Compiler,
@@ -35,7 +36,7 @@ pub const VM = struct {
         return VM{
             .chunk = undefined,
             .ip = 0,
-            .stack = ArrayList(Value).init(allocator),
+            .stack = [_]Value{undefined} ** stack_max,
             .stack_top = 0,
             .globals = StringHashMap(Value).init(allocator),
             .compiler = compiler,
@@ -45,7 +46,6 @@ pub const VM = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.stack.deinit();
         self.globals.deinit();
         self.object_pool.deinit();
         self.allocator.destroy(self.object_pool);
@@ -66,10 +66,13 @@ pub const VM = struct {
         while (true) {
             if (comptime config.debug_trace_execution) {
                 std.debug.print("          ", .{});
-                for (self.stack.items) |item| {
-                    std.debug.print("[{}]", .{item});
+
+                if (self.stack_top != 0) {
+                    for (self.stack[0 .. self.stack_top - 1]) |item| {
+                        std.debug.print("[{}]", .{item});
+                    }
+                    std.debug.print("\n", .{});
                 }
-                std.debug.print("\n", .{});
 
                 _ = debug.disassembleInstruction(self.chunk, self.ip);
             }
@@ -101,11 +104,11 @@ pub const VM = struct {
                     // we still have to push it to the top of the stack, since other op codes only
                     // search for data at the top of the stack
                     const slot = self.readByte();
-                    try self.push(self.stack.items[slot]);
+                    try self.push(self.stack[slot]);
                 },
                 .op_set_local => {
                     const slot = self.readByte();
-                    self.stack.items[slot] = self.peek(0);
+                    self.stack[slot] = self.peek(0);
                 },
                 .op_get_global => {
                     const name = self.readConstant().object.asString();
@@ -204,21 +207,20 @@ pub const VM = struct {
     }
 
     fn push(self: *@This(), value: Value) !void {
-        try self.stack.append(value);
+        self.stack[self.stack_top] = value;
         self.stack_top += 1;
     }
 
     fn pop(self: *@This()) Value {
         self.stack_top -= 1;
-        return self.stack.pop();
+        return self.stack[self.stack_top];
     }
 
     fn peek(self: *@This(), distance: usize) Value {
-        return self.stack.items[self.stack.items.len - distance - 1];
+        return self.stack[self.stack_top - distance - 1];
     }
 
     fn resetStack(self: *@This()) void {
-        self.stack.clearRetainingCapacity();
         self.stack_top = 0;
     }
 

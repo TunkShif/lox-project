@@ -27,6 +27,8 @@ pub const String = struct {
     is_owned: bool = true,
 };
 
+// object creation is needed at both compile-time and runtime,
+// so I created an object pool shared by compiler and vm to avoid coupling
 pub const ObjectPool = struct {
     objects: ?*Object,
     allocator: Allocator,
