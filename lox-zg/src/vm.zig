@@ -61,15 +61,13 @@ pub const VM = struct {
     fn run(self: *@This()) !void {
         while (true) {
             if (comptime config.debug_trace_execution) {
-                std.debug.print("          ", .{});
-
-                if (self.stack_top != 0) {
+                if (self.stack_top > 1) {
+                    std.debug.print("=> ", .{});
                     for (self.stack[0 .. self.stack_top - 1]) |item| {
                         std.debug.print("[{}]", .{item});
                     }
                     std.debug.print("\n", .{});
                 }
-
                 _ = debug.disassembleInstruction(self.chunk, self.ip);
             }
 

@@ -70,7 +70,7 @@ fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
 }
 
 fn jumpInstruction(name: []const u8, sign: isize, chunk: *Chunk, offset: usize) usize {
-    const jump: u16 = (chunk.code.items[offset + 1] <<| 8) | chunk.code.items[offset + 2];
+    const jump: u16 = std.math.shl(u8, chunk.code.items[offset + 1], 8) | chunk.code.items[offset + 2];
     const jump_to = @as(isize, @intCast(offset + 3)) + sign * jump;
     print("{s: <16} {d: >4} -> {d}\n", .{ name, offset, jump_to });
     return offset + 3;
