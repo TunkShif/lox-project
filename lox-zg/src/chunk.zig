@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Value = @import("value.zig").Value;
+const Errors = @import("error.zig").Errors;
 
 pub const OpCode = enum(u8) {
     op_constant,
@@ -23,6 +24,8 @@ pub const OpCode = enum(u8) {
     op_divide,
     op_negate,
     op_not,
+    op_jump,
+    op_jump_if_false,
     op_return,
 };
 
@@ -45,13 +48,13 @@ pub const Chunk = struct {
         self.constants.deinit();
     }
 
-    pub fn writeChunk(self: *@This(), byte: u8, line: usize) !void {
-        try self.code.append(byte);
-        try self.lines.append(line);
+    pub fn writeChunk(self: *@This(), byte: u8, line: usize) Errors!void {
+        self.code.append(byte) catch return Errors.AllocationError;
+        self.lines.append(line) catch return Errors.AllocationError;
     }
 
-    pub fn addConstant(self: *@This(), value: Value) !usize {
-        try self.constants.append(value);
+    pub fn addConstant(self: *@This(), value: Value) Errors!usize {
+        self.constants.append(value) catch return Errors.AllocationError;
         return self.constants.items.len - 1;
     }
 };

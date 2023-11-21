@@ -10,13 +10,9 @@ const String = @import("object.zig").String;
 const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 const ObjectPool = @import("object.zig").ObjectPool;
+const Errors = @import("error.zig").Errors;
 
 const stack_max = 256;
-
-const InterpretError = error{
-    CompileError,
-    RuntimeError,
-};
 
 pub const VM = struct {
     chunk: *Chunk,
@@ -79,10 +75,6 @@ pub const VM = struct {
 
             const instruction: OpCode = @enumFromInt(self.readByte());
             switch (instruction) {
-                .op_return => {
-                    // TODO: do nothing right now
-                    return;
-                },
                 .op_constant => {
                     const constant = self.readConstant();
                     try self.push(constant);
@@ -139,7 +131,7 @@ pub const VM = struct {
                 .op_negate => {
                     if (!self.peek(0).isNumber()) {
                         try self.runtimeErrors("Operand must be a number", .{});
-                        return InterpretError.RuntimeError;
+                        return Errors.RuntimeError;
                     }
 
                     const n = self.pop().number;
@@ -154,6 +146,18 @@ pub const VM = struct {
                 .op_substract, .op_multiply, .op_divide, .op_greater, .op_less => {
                     try self.binaryOperation(instruction);
                 },
+                .op_jump => {
+                    const offset = self.readShort();
+                    self.ip += @as(usize, @intCast(offset));
+                },
+                .op_jump_if_false => {
+                    const offset = self.readShort();
+                    if (self.peek(0).isFalsy()) self.ip += offset;
+                },
+                .op_return => {
+                    // TODO: do nothing right now
+                    return;
+                },
             }
         }
     }
@@ -164,6 +168,12 @@ pub const VM = struct {
         return byte;
     }
 
+    inline fn readShort(self: *@This()) u16 {
+        const integer: u16 = (self.chunk.code.items[self.ip] <<| 8) | (self.chunk.code.items[self.ip + 1]);
+        self.ip += 2;
+        return integer;
+    }
+
     inline fn readConstant(self: *@This()) Value {
         const index = self.readByte();
         return self.chunk.constants.items[index];
@@ -172,7 +182,7 @@ pub const VM = struct {
     fn binaryOperation(self: *@This(), op_code: OpCode) !void {
         if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
             try self.runtimeErrors("Operands must be numbers", .{});
-            return InterpretError.RuntimeError;
+            return Errors.RuntimeError;
         }
 
         const b = self.pop().number;
@@ -202,7 +212,7 @@ pub const VM = struct {
             try self.push(Value.fromNumber(a + b));
         } else {
             try self.runtimeErrors("Operands must be both numbers or strings.", .{});
-            return InterpretError.RuntimeError;
+            return Errors.RuntimeError;
         }
     }
 
@@ -233,6 +243,6 @@ pub const VM = struct {
         try stderr.print("[line {d}] in script\n", .{line});
         self.resetStack();
 
-        return InterpretError.RuntimeError;
+        return Errors.RuntimeError;
     }
 };

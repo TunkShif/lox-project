@@ -10,6 +10,7 @@ const Scanner = @import("scanner.zig").Scanner;
 const Value = @import("value.zig").Value;
 const String = @import("object.zig").String;
 const ObjectPool = @import("object.zig").ObjectPool;
+const Errors = @import("error.zig").Errors;
 
 const Precedence = enum(u8) {
     prec_none,
@@ -25,7 +26,7 @@ const Precedence = enum(u8) {
     prec_primary,
 };
 
-const ParseFn = *const fn (compiler: *Compiler, can_assign: bool) anyerror!void;
+const ParseFn = *const fn (compiler: *Compiler, can_assign: bool) Errors!void;
 
 const ParseRule = struct {
     prefix: ?ParseFn,
@@ -60,7 +61,7 @@ const rules = [_]ParseRule{
     .{ .prefix = Compiler.variable, .infix = null, .precedence = .prec_none }, // token_identifier,
     .{ .prefix = Compiler.string, .infix = null, .precedence = .prec_none }, // token_string,
     .{ .prefix = Compiler.number, .infix = null, .precedence = .prec_none }, // token_number,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_and,
+    .{ .prefix = null, .infix = Compiler.andExpression, .precedence = .prec_and }, // token_and,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_class,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_def,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_else,
@@ -69,7 +70,7 @@ const rules = [_]ParseRule{
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_if,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_let,
     .{ .prefix = Compiler.literal, .infix = null, .precedence = .prec_none }, // token_nil,
-    .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_or,
+    .{ .prefix = null, .infix = Compiler.orExpression, .precedence = .prec_or }, // token_or,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_return,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_super,
     .{ .prefix = null, .infix = null, .precedence = .prec_none }, // token_this,
@@ -115,7 +116,7 @@ pub const Compiler = struct {
         };
     }
 
-    pub fn compile(self: *@This(), source: []const u8, chunk: *Chunk) !bool {
+    pub fn compile(self: *@This(), source: []const u8, chunk: *Chunk) Errors!bool {
         self.scanner.reset(source);
         self.compiling_chunk = chunk;
 
@@ -172,12 +173,21 @@ pub const Compiler = struct {
         try self.currentChunk().writeChunk(byte, self.previous.line);
     }
 
-    fn emitBytes(self: *@This(), byte1: u8, byte2: u8) !void {
+    fn emitBytes(self: *@This(), byte1: u8, byte2: u8) Errors!void {
         try self.emitByte(byte1);
         try self.emitByte(byte2);
     }
 
-    fn emitOpCode(self: *@This(), op_code: OpCode) !void {
+    fn emitJump(self: *@This(), op_code: OpCode) !usize {
+        try self.emitOpCode(op_code);
+        // emit a two-byte operand for op_jump_if_false instruction
+        try self.emitByte(0xff);
+        try self.emitByte(0xff);
+        // returns the offset of the emitted instruction in the chunk
+        return self.currentChunk().code.items.len - 2;
+    }
+
+    fn emitOpCode(self: *@This(), op_code: OpCode) Errors!void {
         try self.emitByte(@intFromEnum(op_code));
     }
 
@@ -185,7 +195,7 @@ pub const Compiler = struct {
         try self.emitOpCode(.op_return);
     }
 
-    fn makeConstant(self: *@This(), value: Value) !u8 {
+    fn makeConstant(self: *@This(), value: Value) Errors!u8 {
         const constant = try self.currentChunk().addConstant(value);
         if (constant > std.math.maxInt(u8)) {
             self.errors("Reached constant size limit in a chunk.");
@@ -194,11 +204,22 @@ pub const Compiler = struct {
         return @intCast(constant);
     }
 
-    fn emitConstant(self: *@This(), value: Value) !void {
+    fn emitConstant(self: *@This(), value: Value) Errors!void {
         try self.emitBytes(@intFromEnum(OpCode.op_constant), try self.makeConstant(value));
     }
 
-    fn endCompiler(self: *@This()) !void {
+    fn patchJump(self: *@This(), offset: usize) void {
+        // calculates byte length of the body of if branch
+        const jump = self.currentChunk().code.items.len - offset - 2;
+        if (jump > std.math.maxInt(u16)) {
+            self.errors("Too much code to jump over.");
+        }
+        // store the value of `jump` as two bytes
+        self.currentChunk().code.items[offset] = @intCast((jump >> 8) & 0xff);
+        self.currentChunk().code.items[offset + 1] = @intCast(jump & 0xff);
+    }
+
+    fn endCompiler(self: *@This()) Errors!void {
         try self.emitReturn();
 
         if (comptime config.debug_print_code) {
@@ -212,7 +233,7 @@ pub const Compiler = struct {
         self.scope_depth += 1;
     }
 
-    fn endScope(self: *@This()) !void {
+    fn endScope(self: *@This()) Errors!void {
         self.scope_depth -= 1;
 
         // pop all variables in current scope when leaving a scope
@@ -222,7 +243,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn binary(self: *@This(), can_assign: bool) !void {
+    fn binary(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         const operator_type = self.previous.token_type;
@@ -254,7 +275,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn literal(self: *@This(), can_assign: bool) !void {
+    fn literal(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         switch (self.previous.token_type) {
@@ -265,21 +286,21 @@ pub const Compiler = struct {
         }
     }
 
-    fn grouping(self: *@This(), can_assign: bool) !void {
+    fn grouping(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         try self.expression();
         self.consume(.token_rparen, "Expect ')' after expression.");
     }
 
-    fn number(self: *@This(), can_assign: bool) !void {
+    fn number(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         const value = std.fmt.parseFloat(f64, self.previous.lexeme) catch 0;
         try self.emitConstant(Value.fromNumber(value));
     }
 
-    fn string(self: *@This(), can_assign: bool) !void {
+    fn string(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         const lexeme = self.previous.lexeme;
@@ -288,7 +309,7 @@ pub const Compiler = struct {
         try self.emitConstant(Value.fromObject(&str.object));
     }
 
-    fn namedVariable(self: *@This(), name: Token, can_assign: bool) !void {
+    fn namedVariable(self: *@This(), name: Token, can_assign: bool) Errors!void {
         var get_op: u8 = 0;
         var set_op: u8 = 0;
 
@@ -312,11 +333,11 @@ pub const Compiler = struct {
         }
     }
 
-    fn variable(self: *@This(), can_assign: bool) !void {
+    fn variable(self: *@This(), can_assign: bool) Errors!void {
         try self.namedVariable(self.previous, can_assign);
     }
 
-    fn unary(self: *@This(), can_assign: bool) !void {
+    fn unary(self: *@This(), can_assign: bool) Errors!void {
         _ = can_assign;
 
         const operator_type = self.previous.token_type;
@@ -330,18 +351,18 @@ pub const Compiler = struct {
         }
     }
 
-    fn expression(self: *@This()) !void {
+    fn expression(self: *@This()) Errors!void {
         try self.parsePrecedence(.prec_assignment);
     }
 
-    fn block(self: *@This()) !void {
+    fn block(self: *@This()) Errors!void {
         while (!self.check(.token_rbrace) and !self.check(.token_eof)) {
             try self.declaration();
         }
         self.consume(.token_rbrace, "Expect '}' after block.");
     }
 
-    fn varDeclaration(self: *@This()) !void {
+    fn varDeclaration(self: *@This()) Errors!void {
         const global = try self.parseVariable("Expect variable name.");
 
         if (self.match(.token_equal)) {
@@ -354,9 +375,7 @@ pub const Compiler = struct {
         try self.defineVariable(global);
     }
 
-    // compiler complains when inferring error sets for mutual recursive function
-    // TODO: narrow the error set values
-    fn declaration(self: *@This()) anyerror!void {
+    fn declaration(self: *@This()) Errors!void {
         if (self.match(.token_let)) {
             try self.varDeclaration();
         } else {
@@ -368,8 +387,10 @@ pub const Compiler = struct {
         }
     }
 
-    fn statement(self: *@This()) !void {
-        if (self.match(.token_lbrace)) {
+    fn statement(self: *@This()) Errors!void {
+        if (self.match(.token_if)) {
+            try self.ifStatement();
+        } else if (self.match(.token_lbrace)) {
             self.beginScope();
             try self.block();
             try self.endScope();
@@ -378,10 +399,32 @@ pub const Compiler = struct {
         }
     }
 
-    fn expressionStatement(self: *@This()) !void {
+    fn expressionStatement(self: *@This()) Errors!void {
         try self.expression();
-        self.consume(.token_semicolon, "Expect ';' after expression");
+        self.consume(.token_semicolon, "Expect ';' after expression.");
         try self.emitOpCode(.op_pop);
+    }
+
+    fn ifStatement(self: *@This()) Errors!void {
+        self.consume(.token_lparen, "Expect '(' after 'if'.");
+        try self.expression();
+        self.consume(.token_rparen, "Expect ')' after condition expression.");
+
+        const then_jump = try self.emitJump(.op_jump_if_false);
+        // pop the condition expression value at the first of the then branch
+        // when it is truthy
+        try self.emitOpCode(.op_pop);
+        try self.statement();
+
+        const else_jump = try self.emitJump(.op_jump);
+
+        self.patchJump(then_jump);
+        // pop the condition expression value before the else branch
+        // when it is falsy
+        try self.emitOpCode(.op_pop);
+
+        if (self.match(.token_else)) try self.statement();
+        self.patchJump(else_jump);
     }
 
     fn synchronize(self: *@This()) void {
@@ -396,7 +439,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn parsePrecedence(self: *@This(), precedence: Precedence) !void {
+    fn parsePrecedence(self: *@This(), precedence: Precedence) Errors!void {
         self.advance();
 
         if (ParseRule.getRule(self.previous.token_type).prefix) |prefixRule| {
@@ -418,7 +461,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn identifierConstant(self: *@This(), name: *const Token) !u8 {
+    fn identifierConstant(self: *@This(), name: *const Token) Errors!u8 {
         const str = try self.object_pool.createString(name.lexeme);
         str.is_owned = false;
         return self.makeConstant(Value.fromObject(&str.object));
@@ -479,7 +522,7 @@ pub const Compiler = struct {
         self.addLocal(name.*);
     }
 
-    fn parseVariable(self: *@This(), error_message: []const u8) !u8 {
+    fn parseVariable(self: *@This(), error_message: []const u8) Errors!u8 {
         self.consume(.token_identifier, error_message);
 
         self.declareVariable();
@@ -493,12 +536,33 @@ pub const Compiler = struct {
         self.locals[@intCast(self.local_count - 1)].depth = @intCast(self.scope_depth);
     }
 
-    fn defineVariable(self: *@This(), global: u8) !void {
+    fn defineVariable(self: *@This(), global: u8) Errors!void {
         if (self.scope_depth > 0) {
             self.markInitialized();
             return;
         }
         try self.emitBytes(@intFromEnum(OpCode.op_define_global), global);
+    }
+
+    // logical `and` and `or` operations shortcuit, so they behave just kind of like control flow
+    fn andExpression(self: *@This(), can_assign: bool) Errors!void {
+        _ = can_assign;
+        const end_jump = try self.emitJump(.op_jump_if_false);
+        try self.emitOpCode(.op_pop);
+        try self.parsePrecedence(.prec_and);
+        self.patchJump(end_jump);
+    }
+
+    fn orExpression(self: *@This(), can_assign: bool) Errors!void {
+        _ = can_assign;
+        const else_jump = try self.emitJump(.op_jump_if_false);
+        const end_jump = try self.emitJump(.op_jump);
+
+        self.patchJump(else_jump);
+        try self.emitOpCode(.op_pop);
+
+        try self.parsePrecedence(.prec_or);
+        self.patchJump(end_jump);
     }
 
     fn errors(self: *@This(), message: []const u8) void {

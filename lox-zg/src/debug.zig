@@ -45,6 +45,8 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         .op_substract => simpleInstruction("OP_SUBSTRACT", offset),
         .op_multiply => simpleInstruction("OP_MULTIPLY", offset),
         .op_divide => simpleInstruction("OP_DIVIDE", offset),
+        .op_jump => jumpInstruction("OP_JUMP", 1, chunk, offset),
+        .op_jump_if_false => jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         .op_return => simpleInstruction("OP_RETURN", offset),
     };
 }
@@ -65,4 +67,11 @@ fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const slot = chunk.code.items[offset + 1];
     print("{s: <16} {d: >4}\n", .{ name, slot });
     return offset + 2;
+}
+
+fn jumpInstruction(name: []const u8, sign: isize, chunk: *Chunk, offset: usize) usize {
+    const jump: u16 = (chunk.code.items[offset + 1] <<| 8) | chunk.code.items[offset + 2];
+    const jump_to = @as(isize, @intCast(offset + 3)) + sign * jump;
+    print("{s: <16} {d: >4} -> {d}\n", .{ name, offset, jump_to });
+    return offset + 3;
 }

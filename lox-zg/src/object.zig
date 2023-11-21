@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Errors = @import("error.zig").Errors;
 
 pub const ObjectType = enum {
     obj_string,
@@ -45,15 +46,15 @@ pub const ObjectPool = struct {
         self.objects = null;
     }
 
-    pub fn createObject(self: *@This(), comptime T: type) !*T {
-        const instance = try self.allocator.create(T);
+    pub fn createObject(self: *@This(), comptime T: type) Errors!*T {
+        const instance = self.allocator.create(T) catch return Errors.AllocationError;
         instance.object.type = ObjectType.enumFromType(T);
         instance.object.next = self.objects;
         self.objects = &instance.object;
         return instance;
     }
 
-    pub fn createString(self: *@This(), source: []const u8) !*String {
+    pub fn createString(self: *@This(), source: []const u8) Errors!*String {
         const string = try self.createObject(String);
         string.chars = source;
         string.is_owned = true;
