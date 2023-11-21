@@ -355,6 +355,7 @@ pub const Compiler = struct {
     }
 
     // compiler complains when inferring error sets for mutual recursive function
+    // TODO: narrow the error set values
     fn declaration(self: *@This()) anyerror!void {
         if (self.match(.token_let)) {
             try self.varDeclaration();

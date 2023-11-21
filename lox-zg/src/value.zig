@@ -62,7 +62,7 @@ pub const Value = union(enum) {
         _ = options;
         switch (self) {
             .nil => try writer.print("nil", .{}),
-            .bool => |value| try writer.print("{}", .{value}),
+            .bool => |value| try writer.print("{?}", .{value}),
             .number => |value| try writer.print("{d}", .{value}),
             .object => |value| {
                 switch (value.type) {
