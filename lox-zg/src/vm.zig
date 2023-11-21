@@ -61,13 +61,12 @@ pub const VM = struct {
     fn run(self: *@This()) !void {
         while (true) {
             if (comptime config.debug_trace_execution) {
-                if (self.stack_top > 1) {
-                    std.debug.print("=> ", .{});
-                    for (self.stack[0 .. self.stack_top - 1]) |item| {
-                        std.debug.print("[{}]", .{item});
-                    }
-                    std.debug.print("\n", .{});
+                std.debug.print("=> [", .{});
+                var i: usize = 0;
+                while (i < self.stack_top) : (i += 1) {
+                    std.debug.print("<{}>", .{self.stack[i]});
                 }
+                std.debug.print("]\n", .{});
                 _ = debug.disassembleInstruction(self.chunk, self.ip);
             }
 
@@ -153,7 +152,6 @@ pub const VM = struct {
                     if (self.peek(0).isFalsy()) self.ip += offset;
                 },
                 .op_return => {
-                    // TODO: do nothing right now
                     return;
                 },
             }
@@ -167,7 +165,7 @@ pub const VM = struct {
     }
 
     inline fn readShort(self: *@This()) u16 {
-        const integer: u16 = (self.chunk.code.items[self.ip] <<| 8) | (self.chunk.code.items[self.ip + 1]);
+        const integer: u16 = std.math.shl(u8, self.chunk.code.items[self.ip], 8) | (self.chunk.code.items[self.ip + 1]);
         self.ip += 2;
         return integer;
     }
