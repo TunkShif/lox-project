@@ -1,14 +1,14 @@
 import { Editor } from "@/components/editor"
 import { Header } from "@/components/header"
 import { Output } from "@/components/output"
-import { Box, styled } from "styled-system/jsx"
+import { Box, Flex, styled } from "styled-system/jsx"
 
 export const App = () => {
   return (
-    <Box w="full" h="screen" fontFamily="sans">
+    <Flex flexDirection="column" w="full" h="screen" fontFamily="sans">
       <Header />
 
-      <styled.main w="full" h="full" display="flex" gap="8">
+      <styled.main w="full" display="flex" flex="1" overflow="hidden" gap="8">
         <Box w="full" h="full" flex="2" borderRightWidth="1px" borderColor="border.default">
           <Editor />
         </Box>
@@ -17,6 +17,6 @@ export const App = () => {
           <Output />
         </Box>
       </styled.main>
-    </Box>
+    </Flex>
   )
 }

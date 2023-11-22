@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button"
+import { ZapIcon } from "@/components/ui/icons"
 import { lox, setStore, store } from "@/store"
+import { css } from "styled-system/css"
 import { Flex, styled } from "styled-system/jsx"
 
 export const Header = () => {
@@ -10,6 +12,10 @@ export const Header = () => {
       const result = interpreter.interpret(editor.getValue())
       setStore("output", result)
     }
+  }
+
+  const handleClear = () => {
+    setStore("output", "")
   }
 
   return (
@@ -24,11 +30,23 @@ export const Header = () => {
       borderBottomWidth="1px"
       borderColor="border.default"
     >
-      <styled.h1 fontSize="lg" fontWeight="semibold">
+      <styled.h1
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        fontSize="lg"
+        fontWeight="semibold"
+      >
+        <ZapIcon
+          class={css({ display: "inline-block", w: "5", h: "5", mr: "2", color: "accent.9" })}
+        />
         Lox Playground
       </styled.h1>
       <Flex gap="2">
         <Button onClick={handleRun}>Run</Button>
+        <Button variant="outline" onClick={handleClear}>
+          Clear
+        </Button>
       </Flex>
     </styled.header>
   )
