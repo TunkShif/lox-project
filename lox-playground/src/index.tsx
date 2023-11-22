@@ -1,0 +1,9 @@
+/* @refresh reload */
+import { render } from "solid-js/web"
+import { App } from "./app"
+
+import "./index.css"
+import "@fontsource-variable/inter"
+
+const root = document.getElementById("root")
+render(() => <App />, root!)

@@ -16,9 +16,10 @@ Tree-walking interpreter written in Kotlin and bytecode virtual machine written 
   - [ ] online playground
 
 # Tasks
-- [ ] How to compile zig targeting wasm
-- [ ] How to work with zig build system
-- [ ] How to load wasm with js in the browser
+
+- [x] How to compile zig targeting wasm
+- [x] How to work with zig build system
+- [x] How to load wasm with js in the browser
 - [ ] How to do benchmark with the original clox implementation
 
 [0]: https://craftinginterpreters.com/

@@ -1,0 +1,27 @@
+{
+  "name": "lox-playground",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "prepare": "panda codegen",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ark-ui/solid": "^1.1.0",
+    "@fontsource-variable/inter": "^5.0.15",
+    "monaco-editor": "^0.44.0",
+    "solid-js": "^1.8.5"
+  },
+  "devDependencies": {
+    "@pandacss/dev": "^0.18.3",
+    "@park-ui/panda-preset": "^0.24.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vite-plugin-solid": "^2.7.2",
+    "vite-tsconfig-paths": "^4.2.1"
+  }
+}
