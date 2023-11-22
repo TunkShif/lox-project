@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
         },
         .optimize = optimize,
     });
+    lib.rdynamic = true;
     b.installArtifact(lib);
 
     const run_cmd = b.addRunArtifact(exe);
