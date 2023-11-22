@@ -1,7 +1,6 @@
 const std = @import("std");
 
 extern fn consoleWrite(ptr: [*]const u8, len: usize) void;
-extern fn consoleFlush() void;
 
 pub const Console = struct {
     const Self = @This();
