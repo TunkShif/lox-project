@@ -1,6 +1,8 @@
 const std = @import("std");
 const debug = @import("debug.zig");
+const io = @import("io.zig");
 const config = @import("config.zig");
+const console = @import("js/console.zig");
 const StringHashMap = std.StringHashMap;
 const Allocator = std.mem.Allocator;
 const Chunk = @import("chunk.zig").Chunk;
@@ -231,9 +233,9 @@ pub const VM = struct {
     }
 
     fn runtimeErrors(self: *@This(), comptime format: []const u8, args: anytype) !void {
-        const stderr = std.io.getStdErr().writer();
-        try stderr.print(format, args);
-        _ = try stderr.write("\n");
+        const stderr: io.Writer = if (comptime config.is_wasm_lib) console.getWriter() else std.io.getStdErr().writer();
+        stderr.print(format, args) catch {};
+        _ = stderr.write("\n") catch 0;
 
         const line = self.chunk.lines.items[self.ip - 1];
         try stderr.print("[line {d}] in script\n", .{line});

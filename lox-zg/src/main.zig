@@ -21,7 +21,7 @@ pub fn main() anyerror!void {
         \\  }
         \\}
         \\let sum = 1 + 2 + 3;
-        \\captured;
+        \\undefined;
     ;
 
     vm.interpret(source) catch return;

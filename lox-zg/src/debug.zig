@@ -1,11 +1,14 @@
 const std = @import("std");
+const io = @import("io.zig");
+const console = @import("js/console.zig");
+const config = @import("config.zig");
 const OpCode = @import("chunk.zig").OpCode;
 const Chunk = @import("chunk.zig").Chunk;
 
-const print = std.debug.print;
+const debug: io.Writer = if (config.is_wasm_lib) console.getWriter() else std.io.getStdErr().writer();
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
-    print("== {s} ==\n", .{name});
+    debug.print("== {s} ==\n", .{name}) catch {};
     var offset: usize = 0;
     while (offset < chunk.code.items.len) {
         offset = disassembleInstruction(chunk, offset);
@@ -16,12 +19,12 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
 // of the next instruction, since some instructions will take arbitrary
 // amount of operands.
 pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
-    print("{d:0>4} ", .{offset});
+    debug.print("{d:0>4} ", .{offset}) catch {};
 
     if (offset > 0 and chunk.lines.items[offset] == chunk.lines.items[offset - 1]) {
-        print("   | ", .{});
+        debug.print("   | ", .{}) catch {};
     } else {
-        print("{d: >4} ", .{chunk.lines.items[offset]});
+        debug.print("{d: >4} ", .{chunk.lines.items[offset]}) catch {};
     }
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
@@ -53,25 +56,25 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
 
 // return the offset for next instruction
 fn simpleInstruction(name: []const u8, offset: usize) usize {
-    print("{s}\n", .{name});
+    debug.print("{s}\n", .{name}) catch {};
     return offset + 1;
 }
 
 fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const constant = chunk.code.items[offset + 1];
-    print("{s: <16} {d: >4} '{}'\n", .{ name, constant, chunk.constants.items[constant] });
+    debug.print("{s: <16} {d: >4} '{}'\n", .{ name, constant, chunk.constants.items[constant] }) catch {};
     return offset + 2;
 }
 
 fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const slot = chunk.code.items[offset + 1];
-    print("{s: <16} {d: >4}\n", .{ name, slot });
+    debug.print("{s: <16} {d: >4}\n", .{ name, slot }) catch {};
     return offset + 2;
 }
 
 fn jumpInstruction(name: []const u8, sign: isize, chunk: *Chunk, offset: usize) usize {
     const jump: u16 = std.math.shl(u8, chunk.code.items[offset + 1], 8) | chunk.code.items[offset + 2];
     const jump_to = @as(isize, @intCast(offset + 3)) + sign * jump;
-    print("{s: <16} {d: >4} -> {d}\n", .{ name, offset, jump_to });
+    debug.print("{s: <16} {d: >4} -> {d}\n", .{ name, offset, jump_to }) catch {};
     return offset + 3;
 }
