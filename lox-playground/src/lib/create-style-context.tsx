@@ -45,6 +45,7 @@ export const createStyleContext = <R extends StyleRecipe>(recipe: R) => {
     const StyledComponent = (props: P) => {
       const styleProperties = useContext(StyleContext)
       return createComponent(
+        // @ts-ignore
         Dynamic,
         mergeProps(props, { component: Component, class: styleProperties?.[slot ?? ""] })
       )
