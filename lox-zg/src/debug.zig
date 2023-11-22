@@ -7,6 +7,10 @@ const Chunk = @import("chunk.zig").Chunk;
 
 const debug: io.Writer = if (config.is_wasm_lib) console.getWriter() else std.io.getStdErr().writer();
 
+pub fn print(comptime format: []const u8, args: anytype) void {
+    debug.print(format, args) catch return;
+}
+
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
     debug.print("== {s} ==\n", .{name}) catch {};
     var offset: usize = 0;

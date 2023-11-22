@@ -63,12 +63,12 @@ pub const VM = struct {
     fn run(self: *@This()) !void {
         while (true) {
             if (comptime config.debug_trace_execution) {
-                std.debug.print("=> [", .{});
+                debug.print("=> [", .{});
                 var i: usize = 0;
                 while (i < self.stack_top) : (i += 1) {
-                    std.debug.print("<{}>", .{self.stack[i]});
+                    debug.print("<{}>", .{self.stack[i]});
                 }
-                std.debug.print("]\n", .{});
+                debug.print("]\n", .{});
                 _ = debug.disassembleInstruction(self.chunk, self.ip);
             }
 
@@ -233,12 +233,11 @@ pub const VM = struct {
     }
 
     fn runtimeErrors(self: *@This(), comptime format: []const u8, args: anytype) !void {
-        const stderr: io.Writer = if (comptime config.is_wasm_lib) console.getWriter() else std.io.getStdErr().writer();
-        stderr.print(format, args) catch {};
-        _ = stderr.write("\n") catch 0;
+        debug.print(format, args);
+        debug.print("\n", .{});
 
         const line = self.chunk.lines.items[self.ip - 1];
-        try stderr.print("[line {d}] in script\n", .{line});
+        debug.print("[line {d}] in script\n", .{line});
         self.resetStack();
 
         return Errors.RuntimeError;

@@ -60,8 +60,6 @@ pub const Chunk = struct {
 };
 
 test "chunk" {
-    std.debug.print("\n", .{});
-
     const debug = @import("debug.zig");
     const allocator = std.testing.allocator;
 

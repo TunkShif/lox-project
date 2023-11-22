@@ -577,16 +577,15 @@ pub const Compiler = struct {
         if (self.panic_mode) return;
         self.panic_mode = true;
 
-        const stderr = std.io.getStdErr().writer();
-        stderr.print("[line {d}] Error ", .{token.line}) catch return;
+        debug.print("[line {d}] Error ", .{token.line});
         switch (token.token_type) {
-            .token_eof => stderr.print("at end", .{}) catch return,
+            .token_eof => debug.print("at end", .{}),
             .token_error => {
                 // do nothing right now
             },
-            else => stderr.print("at '{s}'", .{token.lexeme}) catch return,
+            else => debug.print("at '{s}'", .{token.lexeme}),
         }
-        stderr.print(": {s}\n", .{message}) catch return;
+        debug.print(": {s}\n", .{message});
         self.had_error = true;
     }
 };

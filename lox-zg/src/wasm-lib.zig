@@ -5,11 +5,11 @@ const allocator = std.heap.wasm_allocator;
 
 var vm: VM = undefined;
 
-pub export fn initVM() !void {
-    vm = try VM.init(allocator);
+pub export fn initVM() void {
+    vm = VM.init(allocator) catch undefined;
 }
 
-pub export fn deinitVM() !void {
+pub export fn deinitVM() void {
     vm.deinit();
 }
 

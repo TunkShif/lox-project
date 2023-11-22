@@ -16,5 +16,5 @@ pub const Console = struct {
 };
 
 pub fn getWriter() Console.Writer {
-    return Console.Writer{};
+    return Console.Writer{ .context = undefined };
 }
