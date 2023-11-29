@@ -153,6 +153,10 @@ pub const VM = struct {
                     const offset = self.readShort();
                     if (self.peek(0).isFalsy()) self.ip += offset;
                 },
+                .op_loop => {
+                    const offset = self.readShort();
+                    self.ip -= @as(usize, @intCast(offset));
+                },
                 .op_return => {
                     return;
                 },

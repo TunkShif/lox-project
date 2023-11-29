@@ -21,7 +21,9 @@ pub fn main() anyerror!void {
         \\  }
         \\}
         \\let sum = 1 + 2 + 3;
-        \\undefined;
+        \\let i = 0;
+        \\while (i <= 10) {i = i + 2;}
+        \\i = 10;
     ;
 
     vm.interpret(source) catch return;

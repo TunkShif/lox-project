@@ -81,6 +81,7 @@ const rules = [_]ParseRule{
 };
 
 const max_local_count = std.math.maxInt(u8) + 1;
+const u16_max = std.math.maxInt(u16);
 
 const Local = struct {
     name: Token = undefined,
@@ -169,7 +170,7 @@ pub const Compiler = struct {
         return self.compiling_chunk;
     }
 
-    fn emitByte(self: *@This(), byte: u8) !void {
+    fn emitByte(self: *@This(), byte: u8) Errors!void {
         try self.currentChunk().writeChunk(byte, self.previous.line);
     }
 
@@ -178,13 +179,21 @@ pub const Compiler = struct {
         try self.emitByte(byte2);
     }
 
-    fn emitJump(self: *@This(), op_code: OpCode) !usize {
+    fn emitJump(self: *@This(), op_code: OpCode) Errors!usize {
         try self.emitOpCode(op_code);
         // emit a two-byte operand for op_jump_if_false instruction
         try self.emitByte(0xff);
         try self.emitByte(0xff);
         // returns the offset of the emitted instruction in the chunk
         return self.currentChunk().code.items.len - 2;
+    }
+
+    fn emitLoop(self: *@This(), loop_start: usize) Errors!void {
+        try self.emitOpCode(.op_loop);
+        const offset = self.currentChunk().code.items.len - loop_start + 2;
+        if (offset > u16_max) self.errors("Loop body too large.");
+        try self.emitByte(@intCast((offset >> 8) & 0xff));
+        try self.emitByte(@intCast(offset & 0xff));
     }
 
     fn emitOpCode(self: *@This(), op_code: OpCode) Errors!void {
@@ -211,7 +220,7 @@ pub const Compiler = struct {
     fn patchJump(self: *@This(), offset: usize) void {
         // calculates byte length of the body of if branch
         const jump = self.currentChunk().code.items.len - offset - 2;
-        if (jump > std.math.maxInt(u16)) {
+        if (jump > u16_max) {
             self.errors("Too much code to jump over.");
         }
         // store the value of `jump` as two bytes
@@ -390,6 +399,8 @@ pub const Compiler = struct {
     fn statement(self: *@This()) Errors!void {
         if (self.match(.token_if)) {
             try self.ifStatement();
+        } else if (self.match(.token_while)) {
+            try self.whileStatement();
         } else if (self.match(.token_lbrace)) {
             self.beginScope();
             try self.block();
@@ -425,6 +436,21 @@ pub const Compiler = struct {
 
         if (self.match(.token_else)) try self.statement();
         self.patchJump(else_jump);
+    }
+
+    fn whileStatement(self: *@This()) Errors!void {
+        const loop_start = self.currentChunk().code.items.len;
+        self.consume(.token_lparen, "Expect '(' after 'while'.");
+        try self.expression();
+        self.consume(.token_rparen, "Expect ')' after condition expression.");
+
+        const exit_jump = try self.emitJump(.op_jump_if_false);
+        try self.emitOpCode(.op_pop);
+        try self.statement();
+        try self.emitLoop(loop_start);
+
+        self.patchJump(exit_jump);
+        try self.emitOpCode(.op_pop);
     }
 
     fn synchronize(self: *@This()) void {
