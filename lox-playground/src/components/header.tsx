@@ -1,15 +1,17 @@
 import { Button } from "@/components/ui/button"
-import { ZapIcon } from "@/components/ui/icons"
-import { lox, setStore, store } from "@/store"
+import { GitHubIcon, ZapIcon } from "@/components/ui/icons"
+import { Lox } from "@/lib/lox"
+import { useStore } from "@/store"
 import { css } from "styled-system/css"
 import { Flex, styled } from "styled-system/jsx"
 
 export const Header = () => {
+  const [store, setStore] = useStore()
+
   const handleRun = () => {
-    const interpreter = lox()
     const editor = store.editor
-    if (editor && interpreter) {
-      const result = interpreter.interpret(editor.getValue())
+    if (editor) {
+      const result = Lox.interpret(editor.getValue())
       setStore("output", result)
     }
   }
@@ -46,6 +48,12 @@ export const Header = () => {
         <Button onClick={handleRun}>Run</Button>
         <Button variant="outline" onClick={handleClear}>
           Clear
+        </Button>
+        <Button asChild>
+          <a href="https://github.com/TunkShif/lox-project" target="_blank">
+            <GitHubIcon class={css({ display: "inline-block", w: "5", h: "5" })} />
+            GitHub
+          </a>
         </Button>
       </Flex>
     </styled.header>

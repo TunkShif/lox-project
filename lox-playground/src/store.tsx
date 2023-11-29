@@ -1,13 +1,17 @@
 import * as monaco from "monaco-editor"
-import { createResource } from "solid-js"
-import { createStore } from "solid-js/store"
-import { Lox } from "./lib/lox"
+import { ParentComponent, createContext, useContext } from "solid-js"
+import { SetStoreFunction, createStore } from "solid-js/store"
 
-export type State = {
+export type Store = {
   editor: monaco.editor.IStandaloneCodeEditor | null
   output: string
 }
 
-export const [lox] = createResource(() => Lox.init())
+const StoreContext = createContext<[Store, SetStoreFunction<Store>]>()
 
-export const [store, setStore] = createStore<State>({ output: "==> ", editor: null })
+export const StoreProvider: ParentComponent = (props) => {
+  const store = createStore<Store>({ output: "==> ", editor: null })
+  return <StoreContext.Provider value={store} children={props.children} />
+}
+
+export const useStore = () => useContext(StoreContext)!

@@ -28,11 +28,14 @@ const imports = {
   }
 } satisfies Imports
 
+export type Lox = typeof Lox
+
 export const Lox = {
   async init() {
     const wasm = await WebAssembly.instantiateStreaming(fetch("/lox-zg.wasm"), imports)
     exports = wasm.instance.exports as unknown as Exports
     exports.initVM()
+    await new Promise((r) => setTimeout(r, 2000))
     return this
   },
   interpret(source: string) {

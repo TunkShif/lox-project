@@ -1,4 +1,4 @@
-import { setStore } from "@/store"
+import { useStore } from "@/store"
 import * as monaco from "monaco-editor"
 import { onMount } from "solid-js"
 import { Box } from "styled-system/jsx"
@@ -19,6 +19,8 @@ undefined;
 
 export const Editor = () => {
   let ref: HTMLDivElement
+
+  const [, setStore] = useStore()
 
   onMount(() => {
     const instance = monaco.editor.create(ref, {
